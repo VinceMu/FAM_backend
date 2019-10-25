@@ -1,4 +1,5 @@
 from flask_restplus import Api
+from .authentication import api as auth_api
 
 api = Api(
     title='FAM REST Api',
@@ -6,3 +7,4 @@ api = Api(
     description='',
     doc="/swagger"
 )
+api.add_namespace(auth_api)
