@@ -105,6 +105,3 @@ venv.bak/
 
 # Random Bat fields
 *.bat
-
-# Remove local config from updating automatically
-local_config.py
