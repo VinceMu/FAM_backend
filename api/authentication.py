@@ -2,7 +2,8 @@ from flask_restplus import Namespace, Resource, fields, abort
 from controllers import authentication_controller
 from flask import jsonify, request, make_response
 from flask_jwt_extended import jwt_refresh_token_required,get_jwt_identity,get_raw_jwt, jwt_required
-from globals import mongo_user, jwt
+from globals import jwt
+from models import *
 import hashlib, uuid, secrets
 
 api = Namespace('auth', description='authenticate with flask')
@@ -70,20 +71,14 @@ class Register(Resource):
         salted_password = str(args['password'] + salt).encode('utf8')
         hash_password = hashlib.sha256(salted_password).hexdigest()
 
-        # Create user and attempt to add to the database
-        user_register = {}
-        user_register['email'] = args['email']
-        user_register['fullname'] = args['fullname']
-        user_register['password'] = hash_password
-        user_register['salt'] = salt
-        if (mongo_user.db.auth.find_one({'email' : user_register['email']})):
+        if Auth.objects(email=args['email']):
             # Found one, don't create new
             # Return with Error Code 409 - Conflict. No duplicate users
             return abort(409, "account with that email already exists")
         else:
             try:
-                mongo_user.db.auth.insert(dict(user_register))
-                # Return tokens and user id along with the success code 201
+                new_auth = Auth(email=args['email'], fullname=args['fullname'], password=hash_password, salt=salt)
+                new_auth.save()
                 tokens = authentication_controller.generate_tokens(args["email"])
                 return make_response(jsonify(tokens), 201)
             except:
