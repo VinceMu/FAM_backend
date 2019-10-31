@@ -1,17 +1,16 @@
-from globals import mongo_user
 from flask_jwt_extended import create_access_token,create_refresh_token
 from local_config import TOKEN_EXPIRY
+from models import Auth
 import hashlib
 
 
 def authenticate_user(email,password):
-    found_user = mongo_user.db.auth.find_one({"email":email})
+    found_user = Auth.objects(email=email).first()
     if found_user == None:
         return False, None
-    salt = found_user["salt"]
-    salted_password = str(password + salt).encode('utf8')
+    salted_password = str(password + found_user.salt).encode('utf8')
     hash_password = hashlib.sha256(salted_password).hexdigest()
-    if hash_password == found_user["password"]:
+    if hash_password == found_user.password:
         return True, found_user
     return False, None
 
