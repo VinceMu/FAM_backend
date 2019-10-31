@@ -1,6 +1,7 @@
+from flask import make_response, jsonify
 from flask_restplus import Namespace, Resource, fields, abort
 from flask_jwt_extended import get_jwt_identity, jwt_required
-from datetime import datetime
+import dateutil.parser
 from models import *
 
 api = Namespace('userassets', description='user asset management')
@@ -20,6 +21,7 @@ class AddAsset(Resource):
         if user == None:
             abort(403, "forbidden")
         else:
+            print(args['asset_id'] + "=" + str(args['quantity']) + "=" + args['date_purchased'])
             asset = Asset.objects(id=args['asset_id']).first()
             if asset == None:
                 abort(400, "invalid asset id")
@@ -29,9 +31,29 @@ class AddAsset(Resource):
                 except:
                     abort(400, "invalid quantity")
                 try:
-                    date_purchased = datetime.strptime(datetime_str, '%m/%d/%y %H:%M:%S')
+                    date_purchased = dateutil.parser.parse(args['date_purchased'])
                 except:
-                    abort(400, "invalid date_purchased")
-                new_asset_ownership = AssetOwnership(asset=asset,quantity=asset_quantity, date_purchased=date_purchased)
+                    abort(400, "invalid date")
+                new_asset_ownership = AssetOwnership(asset=asset, quantity=asset_quantity, date_purchased=date_purchased)
+                new_asset_ownership.save()
                 user.assets.append(new_asset_ownership)
                 user.save()
+                return make_response("Success", 200)
+
+asset_autocomplete_parser = api.parser()
+asset_autocomplete_parser.add_argument('asset_name', type=str, required=True, help='The start of the name of the asset', location='json')
+
+@api.route('/asset_autocomplete')
+class AssetAutocomplete(Resource):
+    @api.expect(asset_autocomplete_parser)
+    def post(self):
+        args = asset_autocomplete_parser.parse_args()
+        assets = Asset.objects(name__istartswith=args['asset_name']).all().to_json()
+        return make_response(jsonify(assets), 201)
+
+
+@api.route('/get_available_assets')
+class GetAvailableAssets(Resource):
+    def post(self):
+        return make_response(jsonify(Asset.objects.all().to_json()), 201)
+
