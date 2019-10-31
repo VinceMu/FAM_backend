@@ -21,7 +21,6 @@ class AddAsset(Resource):
         if user == None:
             abort(403, "forbidden")
         else:
-            print(args['asset_id'] + "=" + str(args['quantity']) + "=" + args['date_purchased'])
             asset = Asset.objects(id=args['asset_id']).first()
             if asset == None:
                 abort(400, "invalid asset id")
@@ -51,9 +50,27 @@ class AssetAutocomplete(Resource):
         assets = Asset.objects(name__istartswith=args['asset_name']).all().to_json()
         return make_response(jsonify(assets), 201)
 
+@api.route('/get_assets')
+class GetAssets(Resource):
+    @jwt_required
+    def post(self):
+        user = Auth.objects(email=get_jwt_identity()).first()
+        if user == None:
+            abort(403, "forbidden")
+        else:
+            owned_assets = []
+            for asset_ownership in user.assets:
+                data = {}
+                data['id'] = str(asset_ownership.pk)
+                data['asset_name'] = asset_ownership.asset.name
+                data['asset_ticker'] = asset_ownership.asset.ticker
+                data['asset_price'] = asset_ownership.asset.price
+                data['quantity'] = asset_ownership.quantity
+                data['date_purchased'] = asset_ownership.date_purchased
+                owned_assets.append(data)
+            return make_response(jsonify(owned_assets), 200)
 
 @api.route('/get_available_assets')
 class GetAvailableAssets(Resource):
     def post(self):
         return make_response(jsonify(Asset.objects.all().to_json()), 201)
-
