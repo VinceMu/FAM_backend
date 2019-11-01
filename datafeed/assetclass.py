@@ -36,7 +36,7 @@ class CurrencyClass(AssetClass):
         print('[DataLink] Updating live currency prices...')
         for currency in Currency.objects:
             rate = self.api.get_currency_exchange_rate(currency.ticker, "USD")
-            currency.rate = float(rate[0]['5. Exchange Rate'])
+            currency.price = float(rate[0]['5. Exchange Rate'])
             currency.save()
         print('[DataLink] Update complete!')
 
