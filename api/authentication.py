@@ -36,16 +36,6 @@ class Login(Resource):
         else:
             return abort(401,"login failed")
 
-@api.route('/refresh')
-class Refresh(Resource):
-
-    @jwt_refresh_token_required
-    def post(self):
-        curr_user = get_jwt_identity()
-        new_access_token = authentication_controller.generate_access_token(curr_user)
-        return make_response(jsonify(new_access_token), 200)
-
-
 @api.route('/logout')
 class Logout(Resource):
 
@@ -54,6 +44,15 @@ class Logout(Resource):
         jti = get_raw_jwt()['jti']
         revoked_tokens.add(jti)
         return make_response(jsonify({"msg": "Successfully logged out"}), 200)
+
+@api.route('/refresh')
+class Refresh(Resource):
+
+    @jwt_refresh_token_required
+    def post(self):
+        curr_user = get_jwt_identity()
+        new_access_token = authentication_controller.generate_access_token(curr_user)
+        return make_response(jsonify(new_access_token), 200)
 
 register_parser = api.parser()
 register_parser.add_argument('email', type=str, required=True, help='The users email', location='json')
@@ -85,4 +84,23 @@ class Register(Resource):
                 return make_response(jsonify(tokens), 201)
             except:
                 return None, 500
+
+update_parser = api.parser()
+update_parser.add_argument("old_password", type=str, required=True, help="The user's old password", location="json")
+update_parser.add_argument("new_password", type=str, required=True, help="The user's new password", location="json")
+
+@api.route("/update")
+class UpdateAuth(Resource):
+    @api.expect(update_parser)
+    @jwt_required
+    def put(self):
+        args = update_parser.parse_args()
+        is_authenticated, auth = authentication_controller.authenticate_user(get_jwt_identity(), args["old_password"])
+        if auth == None or is_authenticated == False:
+            return abort(401, "forbidden")
+        auth.salt = secrets.token_hex(8)
+        salted_pass = str(args['new_password'] + auth.salt).encode("utf8")
+        auth.password = hashlib.sha256(salted_pass).hexdigest()
+        auth.save()
+        return make_response("Success", 200)
 

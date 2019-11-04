@@ -1,4 +1,4 @@
-from mongoengine import Document, StringField, FloatField, DateTimeField, LazyReferenceField, ListField, ReferenceField
+from mongoengine import Document, StringField, FloatField, DateTimeField, LazyReferenceField, ListField, ReferenceField, FileField
 
 class Asset(Document):
     ticker = StringField(required=True)
@@ -54,4 +54,6 @@ class Stock(Asset):
 class User(Document):
     email = StringField(required=True, unique=True)
     fullname = StringField()
+    base_currency = ReferenceField(Currency)
+    picture = FileField()
     assets = ListField(ReferenceField(AssetOwnership))
