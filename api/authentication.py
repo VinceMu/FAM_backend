@@ -6,7 +6,7 @@ from globals import jwt
 from models import *
 import hashlib, uuid, secrets
 
-api = Namespace('auth', description='authenticate with flask')
+api = Namespace('auth', description='authentication endpoint')
 
 revoked_tokens = set()
 
@@ -77,8 +77,10 @@ class Register(Resource):
             return abort(409, "account with that email already exists")
         else:
             try:
-                new_auth = Auth(email=args['email'], fullname=args['fullname'], password=hash_password, salt=salt)
+                new_auth = Auth(email=args['email'], password=hash_password, salt=salt)
                 new_auth.save()
+                new_user = User(email=args['email'], fullname=args['fullname'])
+                new_user.save()
                 tokens = authentication_controller.generate_tokens(args["email"])
                 return make_response(jsonify(tokens), 201)
             except:
