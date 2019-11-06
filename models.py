@@ -1,11 +1,21 @@
-from mongoengine import Document, StringField, FloatField, DateTimeField, LazyReferenceField, ListField, ReferenceField, FileField
+from mongoengine import Document, StringField, FloatField, DateTimeField, LazyReferenceField, ListField, ReferenceField, FileField, IntField
 
 class Asset(Document):
     ticker = StringField(required=True)
     name = StringField(required=True)
     price = FloatField()
+    timestamp = DateTimeField()
     historical_data = LazyReferenceField('HistoricalData')
     meta = {'allow_inheritance': True}
+
+    def get_candles(self):
+        return Candle.objects(asset=self)
+
+    def get_candles_interval(self, interval):
+        return Candle.objects(asset=self, interval=interval)
+
+    def get_last_candle_interval(self, interval):
+        return Candle.objects(asset=self, interval=interval).order_by('-close_time').first()
 
 class AssetOwnership(Document):
     user = LazyReferenceField('User', required=True)
@@ -31,22 +41,17 @@ class Auth(Document):
     salt = StringField()
 
 class Candle(Document):
+    asset = LazyReferenceField(Asset, required=True)
     open = FloatField()
     close = FloatField()
     high = FloatField()
     low = FloatField()
     volume = FloatField()
-    meta = {'allow_inheritance': True}
-
-class CandleTimed(Candle):
-    start_time = DateTimeField()
-    interval = DateTimeField()
+    close_time = DateTimeField()
+    interval = IntField()
 
 class Currency(Asset):
     pass
-
-class HistoricalData(Document):
-    candles = ListField(ReferenceField(CandleTimed))
 
 class Stock(Asset):
     pass
