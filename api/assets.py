@@ -21,6 +21,15 @@ class AutocompleteAsset(Resource):
 PERFORMANCE_DAILY_PARSER = api.parser()
 PERFORMANCE_DAILY_PARSER.add_argument('asset_id', type=str, required=True, help='The ID of the asset', location='args')
 
+def get_performance_fields(self, asset):
+    candle = asset.get_candles_interval_sorted(86400).first()
+    fields = {}
+    fields['last_daily'] = candle.serialize_price()
+    fields['curr_daily'] = asset.serialize_price()
+    fields['last_performance_percent'] = round((candle.close - candle.open)/candle.open*100,2)
+    fields['curr_performance_percent'] = round((asset.price - candle.close)/candle.close*100,2)
+    return fields
+
 @api.route('/performance/daily')
 class PerformanceDaily(Resource):
     @jwt_required
@@ -32,15 +41,12 @@ class PerformanceDaily(Resource):
         asset = Asset.objects(id=args['asset_id']).first()
         if asset == None:
             return abort(400, "invalid asset")
-        candle = asset.get_candles_interval_sorted(86400).first()
-        fields = {}
-        fields['last_daily'] = candle.serialize_price()
-        fields['curr_daily'] = asset.serialize_price()
-        fields['last_performance_percent'] = round((candle.close - candle.open)/candle.open*100,2)
-        fields['curr_performance_percent'] = round((asset.price - candle.close)/candle.close*100,2)
-        return make_response(jsonify(fields), 200)
+        return make_response(asset.serialize(), 200)
 
 @api.route('/read')
 class ReadAssets(Resource):
     def get(self):
-        return make_response(jsonify(Asset.objects.all().to_json()), 201)
+        results = []
+        for asset in Asset.objects:
+            results.append(asset.serialize())
+        return make_response(jsonify(results), 201)

@@ -23,9 +23,22 @@ class Asset(Document):
 
     def is_closed(self):
         last_update_diff = ((datetime.datetime.utcnow()-self.timestamp).total_seconds())
-        if last_update_diff > 300:
+        if last_update_diff > 1800:
             return True
         return False
+
+    def serialize(self):
+        fields = {}
+        fields['id'] = str(self.pk)
+        fields['ticker'] = self.name
+        fields['price'] = self.price
+        fields['timestamp'] = self.timestamp
+        fields['is_closed'] = self.is_closed()
+        candle = self.get_last_candle_interval(86400)
+        fields['last_daily_candle'] = candle.serialize_price()
+        fields['last_performance_percent'] = round((candle.close - candle.open)/candle.open*100,2)
+        fields['curr_performance_percent'] = round((self.price - candle.close)/candle.close*100,2)
+        return fields
 
     def serialize_price(self):
         fields = {}
