@@ -11,6 +11,7 @@ create_parser = api.parser()
 create_parser.add_argument('asset_id', type=str, required=True, help='The unique identifier for the asset', location='json')
 create_parser.add_argument('quantity', type=float, required=True, help='The quantity of the asset', location='json')
 create_parser.add_argument('date_purchased', type=str, required=True, help='The date the asset was purchased', location='json')
+create_parser.add_argument('date_sold', type=str, required=False, help='The date the asset was sold (empty if not sold)', location='json')
 
 @api.route('/create')
 class CreateTransaction(Resource):
@@ -35,8 +36,15 @@ class CreateTransaction(Resource):
                 try:
                     date_purchased = dateutil.parser.parse(args['date_purchased'])
                 except:
-                    return abort(400, "invalid date")
-                new_asset_ownership = AssetOwnership(user=user, asset=asset, quantity=asset_quantity, date_purchased=date_purchased)
+                    return abort(400, "invalid date purchased")
+                if args['date_sold'] != None:
+                    try:
+                        date_sold = dateutil.parser.parse(args['date_sold'])
+                    except:
+                        return abort(400, "invalid date sold")
+                else:
+                    date_sold = None
+                new_asset_ownership = AssetOwnership(user=user, asset=asset, quantity=asset_quantity, date_purchased=date_purchased, date_sold=date_sold)
                 new_asset_ownership.save()
                 user.assets.append(new_asset_ownership)
                 user.save()
@@ -130,6 +138,8 @@ class UpdateTransaction(Resource):
                 date_sold = dateutil.parser.parse(args['date_sold'])
             except:
                 return abort(400, "invalid date sold")
-            transaction.date_sold = date_sold
+        else:
+            date_sold = None
+        transaction.date_sold = date_sold
         transaction.save()
         return make_response("Success", 200)

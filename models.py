@@ -1,4 +1,5 @@
 from mongoengine import Document, StringField, FloatField, DateTimeField, LazyReferenceField, ListField, ReferenceField, FileField, IntField
+import datetime
 
 class Asset(Document):
     ticker = StringField(required=True)
@@ -14,8 +15,24 @@ class Asset(Document):
     def get_candles_interval(self, interval):
         return Candle.objects(asset=self, interval=interval)
 
+    def get_candles_interval_sorted(self, interval):
+        return Candle.objects(asset=self, interval=interval).order_by('-close_time')
+
     def get_last_candle_interval(self, interval):
         return Candle.objects(asset=self, interval=interval).order_by('-close_time').first()
+
+    def is_closed(self):
+        last_update_diff = ((datetime.datetime.utcnow()-self.timestamp).total_seconds())
+        if last_update_diff > 300:
+            return True
+        return False
+
+    def serialize_price(self):
+        fields = {}
+        fields['closed'] = self.is_closed()
+        fields['price'] = self.price
+        fields['timestamp'] = self.timestamp
+        return fields
 
 class AssetOwnership(Document):
     user = LazyReferenceField('User', required=True)
@@ -33,6 +50,7 @@ class AssetOwnership(Document):
         fields['asset_price'] = self.asset.price
         fields['quantity'] = self.quantity
         fields['date_purchased'] = self.date_purchased
+        fields['date_sold'] = self.date_sold
         return fields
 
 class Auth(Document):
@@ -49,6 +67,13 @@ class Candle(Document):
     volume = FloatField()
     close_time = DateTimeField()
     interval = IntField()
+
+    def serialize_price(self):
+        fields = {}
+        fields['open'] = self.open
+        fields['close'] = self.close
+        fields['timestamp'] = self.close_time
+        return fields
 
 class Currency(Asset):
     pass
