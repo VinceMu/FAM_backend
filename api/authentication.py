@@ -6,16 +6,12 @@ from globals import jwt
 from models import *
 import hashlib, uuid, secrets
 
-api = Namespace('auth', description='authenticate with flask')
-
-revoked_tokens = set()
-
+api = Namespace('auth', description='authentication endpoint')
 
 @jwt.token_in_blacklist_loader
 def check_if_token_in_blacklist(decrypted_token):
     jti = decrypted_token['jti']
-    return jti in revoked_tokens
-
+    return (AuthRevokedToken.objects(jti=jti).first() is not None)
 
 login_parser = api.parser()
 login_parser.add_argument('email', type=str, required=True, help='The users email', location='json')
@@ -36,6 +32,26 @@ class Login(Resource):
         else:
             return abort(401,"login failed")
 
+@api.route('/logout')
+class Logout(Resource):
+
+    @jwt_required
+    def delete(self):
+        jti = get_raw_jwt()['jti']
+        new_revoked = AuthRevokedToken(jti=jti)
+        new_revoked.save()
+        return make_response(jsonify({"msg": "Successfully logged out"}), 200)
+
+@api.route('/logout_refresh')
+class LogoutRefresh(Resource):
+
+    @jwt_refresh_token_required
+    def delete(self):
+        jti = get_raw_jwt()['jti']
+        new_revoked = AuthRevokedToken(jti=jti)
+        new_revoked.save()
+        return jsonify({"msg": "Successfully logged out"}, 200)
+
 @api.route('/refresh')
 class Refresh(Resource):
 
@@ -44,16 +60,6 @@ class Refresh(Resource):
         curr_user = get_jwt_identity()
         new_access_token = authentication_controller.generate_access_token(curr_user)
         return make_response(jsonify(new_access_token), 200)
-
-
-@api.route('/logout')
-class Logout(Resource):
-
-    @jwt_required
-    def delete(self):
-        jti = get_raw_jwt()['jti']
-        revoked_tokens.add(jti)
-        return make_response(jsonify({"msg": "Successfully logged out"}), 200)
 
 register_parser = api.parser()
 register_parser.add_argument('email', type=str, required=True, help='The users email', location='json')
@@ -77,10 +83,31 @@ class Register(Resource):
             return abort(409, "account with that email already exists")
         else:
             try:
-                new_auth = Auth(email=args['email'], fullname=args['fullname'], password=hash_password, salt=salt)
+                new_auth = Auth(email=args['email'], password=hash_password, salt=salt)
                 new_auth.save()
+                new_user = User(email=args['email'], fullname=args['fullname'])
+                new_user.save()
                 tokens = authentication_controller.generate_tokens(args["email"])
                 return make_response(jsonify(tokens), 201)
             except:
                 return None, 500
+
+update_parser = api.parser()
+update_parser.add_argument("old_password", type=str, required=True, help="The user's old password", location="json")
+update_parser.add_argument("new_password", type=str, required=True, help="The user's new password", location="json")
+
+@api.route("/update")
+class UpdateAuth(Resource):
+    @api.expect(update_parser)
+    @jwt_required
+    def put(self):
+        args = update_parser.parse_args()
+        is_authenticated, auth = authentication_controller.authenticate_user(get_jwt_identity(), args["old_password"])
+        if auth == None or is_authenticated == False:
+            return abort(401, "forbidden")
+        auth.salt = secrets.token_hex(8)
+        salted_pass = str(args['new_password'] + auth.salt).encode("utf8")
+        auth.password = hashlib.sha256(salted_pass).hexdigest()
+        auth.save()
+        return make_response("Success", 200)
 
