@@ -32,7 +32,7 @@ class UserPortfolioHistorical(Resource):
         value = {}
         spent_value = {}
         earliest_date = None
-        loop_end_date = datetime.datetime.now().date()
+        loop_end_date = datetime.datetime.utcnow().date()
         for transaction in user.assets:
             date_purchased = transaction.date_purchased.date() if (transaction.date_purchased != None) else None
             if earliest_date == None or date_purchased < earliest_date:
@@ -61,12 +61,16 @@ class UserPortfolioHistorical(Resource):
                     else:
                         spent_value[other_tag] = (transaction.quantity * (end_price - start_price))
                     loop_start_date = loop_start_date + datetime.timedelta(days=1)
+        if len(value) == 0 and len(spent_value) == 0:
+            return make_response(jsonify({}))
         result = {}
         # Check all date values have been filled and combined
         while earliest_date < loop_end_date:
             mytag = str(earliest_date)
             if mytag not in value:
                 value[mytag] = 0
+            if mytag not in spent_value:
+                spent_value[mytag] = 0
             result[mytag] = {
                 "purchase_value": spent_value[mytag],
                 "net_value": value[mytag] + spent_value[mytag],
