@@ -199,12 +199,8 @@ class StocksClass(AssetClass):
                 datestamp = datestamp.astimezone(UTC)
                 if datestamp.date() == datetime.datetime.utcnow().date():
                     continue
-                try:
-                    if latest_data is not None and datestamp <= latest_data.close_time:
-                        break
-                except:
-                    print("datestamp = " + str(datestamp))
-                    print("close_time = " + str(latest_data.close_time))
+                if latest_data is not None and datestamp <= latest_data.close_time:
+                    break
                 candle = Candle(asset=stock, open=float(entry['1. open']), high=float(entry['2. high']), low=float(entry['3. low']), close=float(entry['4. close']), volume=float(entry['5. volume']), close_time=datestamp, interval=interval)
                 if candles:
                     last_candle = candles[-1]
