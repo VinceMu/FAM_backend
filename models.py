@@ -71,6 +71,9 @@ class Auth(Document):
     password = StringField()
     salt = StringField()
 
+class AuthRevokedToken(Document):
+    jti = StringField(required=True, unique=True)
+
 class Candle(Document):
     asset = LazyReferenceField(Asset, required=True)
     open = FloatField()

@@ -8,14 +8,10 @@ import hashlib, uuid, secrets
 
 api = Namespace('auth', description='authentication endpoint')
 
-revoked_tokens = set()
-
-
 @jwt.token_in_blacklist_loader
 def check_if_token_in_blacklist(decrypted_token):
     jti = decrypted_token['jti']
-    return jti in revoked_tokens
-
+    return (AuthRevokedToken.objects(jti=jti).first() is not None)
 
 login_parser = api.parser()
 login_parser.add_argument('email', type=str, required=True, help='The users email', location='json')
@@ -42,8 +38,19 @@ class Logout(Resource):
     @jwt_required
     def delete(self):
         jti = get_raw_jwt()['jti']
-        revoked_tokens.add(jti)
+        new_revoked = AuthRevokedToken(jti=jti)
+        new_revoked.save()
         return make_response(jsonify({"msg": "Successfully logged out"}), 200)
+
+@api.route('/logout_refresh')
+class LogoutRefresh(Resource):
+
+    @jwt_refresh_token_required
+    def delete(self):
+        jti = get_raw_jwt()['jti']
+        new_revoked = AuthRevokedToken(jti=jti)
+        new_revoked.save()
+        return jsonify({"msg": "Successfully logged out"}, 200)
 
 @api.route('/refresh')
 class Refresh(Resource):
