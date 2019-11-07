@@ -1,4 +1,4 @@
-from mongoengine import Document, StringField, FloatField, DateTimeField, LazyReferenceField, ListField, ReferenceField, FileField, IntField
+from mongoengine import Document, StringField, FloatField, DateTimeField, LazyReferenceField, ListField, ReferenceField, FileField, IntField, Q
 import datetime
 
 class Asset(Document):
@@ -20,6 +20,18 @@ class Asset(Document):
 
     def get_last_candle_interval(self, interval):
         return Candle.objects(asset=self, interval=interval).order_by('-close_time').first()
+
+    def get_daily_candle(self, interval, date):
+        next_day = date+datetime.timedelta(days=2)
+        result_set = Candle.objects(asset=self, interval=interval)
+        return result_set.filter(Q(close_time__gte=date) & Q(close_time__lt=next_day)).first()
+
+    def get_daily_candles(self, interval, date_start, date_end):
+        if date_start == None or date_end == None:
+            return Candle.objects(asset=self, interval=interval)
+        else:
+            result_set = Candle.objects(asset=self, interval=interval)
+            return result_set.filter(Q(close_time__gte=date_start) & Q(close_time__lte=date_end))
 
     def is_closed(self):
         last_update_diff = ((datetime.datetime.utcnow()-self.timestamp).total_seconds())
@@ -83,6 +95,17 @@ class Candle(Document):
     volume = FloatField()
     close_time = DateTimeField()
     interval = IntField()
+
+    def as_dict(self):
+        return {
+            "open": self.open,
+            "close": self.close,
+            "high": self.high,
+            "low": self.low,
+            "volume": self.volume,
+            "open_time": self.close_time,
+            "interval": self.interval
+        }
 
     def serialize_price(self):
         fields = {}
