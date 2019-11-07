@@ -22,6 +22,32 @@ class UserAssets(Resource):
                 owned_assets.append(asset_ownership.serialize())
             return make_response(jsonify(owned_assets), 200)
 
+@api.route('/portfolio/current')
+class UserPortfolioCurrent(Resource):
+    @jwt_required
+    def get(self):
+        user = User.objects(email=get_jwt_identity()).first()
+        if user == None:
+            return abort(401, "forbidden")
+        value = 0
+        spent_value = 0
+        for transaction in user.assets:
+            date_purchased = transaction.date_purchased.date()
+            start_candle = transaction.asset.get_daily_candle(86400, date_purchased)
+            spent_value -= (transaction.quantity * start_candle.close)
+            if transaction.date_sold != None:
+                date_sold = transaction.date_sold.date()
+                end_candle = transaction.asset.get_daily_candle(86400, date_sold)
+                spent_value += (transaction.quantity * end_candle.close)
+            else:
+                value += (transaction.asset.price * transaction.quantity)
+        result = {
+            "purchase_value": spent_value,
+            "net_value": value + spent_value,
+            "value": value
+        }
+        return make_response(jsonify(result), 200)
+
 @api.route('/portfolio/historical')
 class UserPortfolioHistorical(Resource):
     @jwt_required
