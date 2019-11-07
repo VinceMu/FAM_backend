@@ -80,7 +80,7 @@ class CurrencyClass(AssetClass):
                     daily_data = self.api.get_currency_exchange_daily(currency.ticker, "USD", outputsize=search_type)
                 except:
                     print('[DataLink] An error occurred obtaining daily currency data... retrying in 1s...')
-                    sleep(1)
+                    sleep(local_config.ERROR_WAIT_TIME)
                     continue
                 break
             candles = []
@@ -109,14 +109,14 @@ class CurrencyClass(AssetClass):
 
 
     def on_daily(self):
-        p = mp.Pool(10)
+        p = mp.Pool(local_config.WORKER_THREADS)
         p.map(self.grab_daily_history, Currency.objects)
         p.close()
         p.join()
 
     def on_interval(self):
         print('[DataLink] Updating live currency prices...')
-        p = mp.Pool(10)
+        p = mp.Pool(local_config.WORKER_THREADS)
         p.map(self.grab_price, Currency.objects)
         p.close()
         p.join()
@@ -218,7 +218,7 @@ class StocksClass(AssetClass):
             print('[DataLink] No update required on data for ' + stock.name + " (" + stock.ticker + ")")
 
     def on_daily(self):
-        p = mp.Pool(10)
+        p = mp.Pool(local_config.WORKER_THREADS)
         p.map(self.grab_daily_history, Stock.objects)
         p.close()
         p.join()
@@ -231,7 +231,7 @@ class StocksClass(AssetClass):
         while start_index < len(self.query_values):
             array.append(start_index)
             start_index += self.max_bulk_query
-        p = mp.Pool(10)
+        p = mp.Pool(local_config.WORKER_THREADS)
         p.map(self.grab_price, array)
         p.close()
         p.join()
