@@ -243,7 +243,7 @@ class StocksClass(AssetClass):
                 result = csv.reader(csv_file, delimiter=",")
                 counter = 0
                 for row in result:
-                    if counter == 0:
+                    if local_config.LIMIT_ASSETS == False or counter == 0:
                         stock = Stock(ticker=row[0], name=row[1])
                         stock.save()
                     counter += 1

@@ -8,4 +8,5 @@ JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY","fam")
 REFRESH_INTERVAL = 600
 WORKER_THREADS = 5
 ERROR_WAIT_TIME = 10
+LIMIT_ASSETS = False
 os.environ['ALPHAVANTAGE_API_KEY'] = "[insert key here]"

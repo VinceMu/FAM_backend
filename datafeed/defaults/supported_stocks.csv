@@ -9,7 +9,6 @@ ADBE,Adobe Systems Inc,Information Technology
 AAP,Advance Auto Parts,Consumer Discretionary
 AMD,Advanced Micro Devices Inc,Information Technology
 AES,AES Corp,Utilities
-AET,Aetna Inc,Health Care
 AMG,Affiliated Managers Group Inc,Financials
 AFL,AFLAC Inc,Financials
 A,Agilent Technologies Inc,Health Care
@@ -41,9 +40,7 @@ ABC,AmerisourceBergen Corp,Health Care
 AME,AMETEK Inc,Industrials
 AMGN,Amgen Inc,Health Care
 APH,Amphenol Corp,Information Technology
-APC,Anadarko Petroleum Corp,Energy
 ADI,"Analog Devices, Inc.",Information Technology
-ANDV,Andeavor,Energy
 ANSS,ANSYS,Information Technology
 ANTM,Anthem Inc.,Health Care
 AON,Aon plc,Financials
@@ -62,7 +59,6 @@ ADP,Automatic Data Processing,Information Technology
 AZO,AutoZone Inc,Consumer Discretionary
 AVB,"AvalonBay Communities, Inc.",Real Estate
 AVY,Avery Dennison Corp,Materials
-BHGE,"Baker Hughes, a GE Company",Energy
 BLL,Ball Corp,Materials
 BAC,Bank of America Corp,Financials
 BAX,Baxter International Inc.,Health Care
@@ -82,7 +78,6 @@ BMY,Bristol-Myers Squibb,Health Care
 AVGO,Broadcom,Information Technology
 BF.B,Brown-Forman Corp.,Consumer Staples
 CHRW,C. H. Robinson Worldwide,Industrials
-CA,"CA, Inc.",Information Technology
 COG,Cabot Oil & Gas,Energy
 CDNS,Cadence Design Systems,Information Technology
 CPB,Campbell Soup,Consumer Staples
@@ -92,7 +87,6 @@ KMX,Carmax Inc,Consumer Discretionary
 CCL,Carnival Corp.,Consumer Discretionary
 CAT,Caterpillar Inc.,Industrials
 CBOE,CBOE Holdings,Financials
-CBG,CBRE Group,Real Estate
 CBS,CBS Corp.,Consumer Discretionary
 CELG,Celgene Corp.,Health Care
 CNC,Centene Corporation,Health Care
@@ -131,7 +125,6 @@ GLW,Corning Inc.,Information Technology
 COST,Costco Wholesale Corp.,Consumer Staples
 COTY,"Coty, Inc",Consumer Staples
 CCI,Crown Castle International Corp.,Real Estate
-CSRA,CSRA Inc.,Information Technology
 CSX,CSX Corp.,Industrials
 CMI,Cummins Inc.,Industrials
 CVS,CVS Health,Consumer Staples
@@ -152,8 +145,6 @@ DG,Dollar General,Consumer Discretionary
 DLTR,Dollar Tree,Consumer Discretionary
 D,Dominion Energy,Utilities
 DOV,Dover Corp.,Industrials
-DWDP,DowDuPont,Materials
-DPS,Dr Pepper Snapple Group,Consumer Staples
 DTE,DTE Energy Co.,Utilities
 DUK,Duke Energy,Utilities
 DRE,Duke Realty Corp,Real Estate
@@ -168,7 +159,6 @@ EW,Edwards Lifesciences,Health Care
 EA,Electronic Arts,Information Technology
 EMR,Emerson Electric Company,Industrials
 ETR,Entergy Corp.,Utilities
-EVHC,Envision Healthcare,Health Care
 EOG,EOG Resources,Energy
 EQT,EQT Corporation,Energy
 EFX,Equifax Inc.,Industrials
@@ -181,7 +171,6 @@ ES,Eversource Energy,Utilities
 EXC,Exelon Corp.,Utilities
 EXPE,Expedia Inc.,Consumer Discretionary
 EXPD,Expeditors International,Industrials
-ESRX,Express Scripts,Health Care
 EXR,Extra Space Storage,Real Estate
 XOM,Exxon Mobil Corp.,Energy
 FFIV,F5 Networks,Information Technology
@@ -208,7 +197,6 @@ GRMN,Garmin Ltd.,Consumer Discretionary
 IT,Gartner Inc,Information Technology
 GD,General Dynamics,Industrials
 GE,General Electric,Industrials
-GGP,General Growth Properties Inc.,Real Estate
 GIS,General Mills,Consumer Staples
 GM,General Motors,Consumer Discretionary
 GPC,Genuine Parts,Consumer Discretionary
@@ -220,11 +208,9 @@ GWW,Grainger (W.W.) Inc.,Industrials
 HAL,Halliburton Co.,Energy
 HBI,Hanesbrands Inc,Consumer Discretionary
 HOG,Harley-Davidson,Consumer Discretionary
-HRS,Harris Corporation,Information Technology
 HIG,Hartford Financial Svc.Gp.,Financials
 HAS,Hasbro Inc.,Consumer Discretionary
 HCA,HCA Holdings,Health Care
-HCP,HCP Inc.,Real Estate
 HP,Helmerich & Payne,Energy
 HSIC,Henry Schein,Health Care
 HES,Hess Corporation,Energy
@@ -274,12 +260,10 @@ KSS,Kohl's Corp.,Consumer Discretionary
 KHC,Kraft Heinz Co,Consumer Staples
 KR,Kroger Co.,Consumer Staples
 LB,L Brands Inc.,Consumer Discretionary
-LLL,L-3 Communications Holdings,Industrials
 LH,Laboratory Corp. of America Holding,Health Care
 LRCX,Lam Research,Information Technology
 LEG,Leggett & Platt,Consumer Discretionary
 LEN,Lennar Corp.,Consumer Discretionary
-LUK,Leucadia National Corp.,Financials
 LLY,Lilly (Eli) & Co.,Health Care
 LNC,Lincoln National,Financials
 LKQ,LKQ Corporation,Consumer Discretionary
@@ -306,7 +290,6 @@ MRK,Merck & Co.,Health Care
 MET,MetLife Inc.,Financials
 MTD,Mettler Toledo,Health Care
 MGM,MGM Resorts International,Consumer Discretionary
-KORS,Michael Kors Holdings,Consumer Discretionary
 MCHP,Microchip Technology,Information Technology
 MU,Micron Technology,Information Technology
 MSFT,Microsoft Corp.,Information Technology
@@ -314,7 +297,6 @@ MAA,Mid-America Apartments,Real Estate
 MHK,Mohawk Industries,Consumer Discretionary
 TAP,Molson Coors Brewing Company,Consumer Staples
 MDLZ,Mondelez International,Consumer Staples
-MON,Monsanto Co.,Materials
 MNST,Monster Beverage,Consumer Staples
 MCO,Moody's Corp,Financials
 MS,Morgan Stanley,Financials
@@ -326,7 +308,6 @@ NAVI,Navient,Financials
 NTAP,NetApp,Information Technology
 NFLX,Netflix Inc.,Information Technology
 NWL,Newell Brands,Consumer Discretionary
-NFX,Newfield Exploration Co,Energy
 NEM,Newmont Mining Corporation,Materials
 NWSA,News Corp. Class A,Consumer Discretionary
 NWS,News Corp. Class B,Consumer Discretionary
@@ -369,8 +350,6 @@ PNC,PNC Financial Services,Financials
 RL,Polo Ralph Lauren Corp.,Consumer Discretionary
 PPG,PPG Industries,Materials
 PPL,PPL Corp.,Utilities
-PX,Praxair Inc.,Materials
-PCLN,Priceline.com Inc,Consumer Discretionary
 PFG,Principal Financial Group,Financials
 PG,Procter & Gamble,Consumer Staples
 PGR,Progressive Corp.,Financials
@@ -388,7 +367,6 @@ RRC,Range Resources Corp.,Energy
 RJF,Raymond James Financial Inc.,Financials
 RTN,Raytheon Co.,Industrials
 O,Realty Income Corporation,Real Estate
-RHT,Red Hat Inc.,Information Technology
 REG,Regency Centers Corporation,Real Estate
 REGN,Regeneron,Health Care
 RF,Regions Financial Corp.,Financials
@@ -396,16 +374,13 @@ RSG,Republic Services Inc,Industrials
 RMD,ResMed,Health Care
 RHI,Robert Half International,Industrials
 ROK,Rockwell Automation Inc.,Industrials
-COL,Rockwell Collins,Industrials
 ROP,Roper Technologies,Industrials
 ROST,Ross Stores,Consumer Discretionary
 RCL,Royal Caribbean Cruises Ltd,Consumer Discretionary
 SPGI,"S&P Global, Inc.",Financials
 CRM,Salesforce.com,Information Technology
 SBAC,SBA Communications,Real Estate
-SCG,SCANA Corp,Utilities
 SLB,Schlumberger Ltd.,Energy
-SNI,Scripps Networks Interactive Inc.,Consumer Discretionary
 STX,Seagate Technology,Information Technology
 SEE,Sealed Air,Materials
 SRE,Sempra Energy,Utilities
@@ -423,7 +398,6 @@ STT,State Street Corp.,Financials
 SRCL,Stericycle Inc,Industrials
 SYK,Stryker Corp.,Health Care
 STI,SunTrust Banks,Financials
-SYMC,Symantec Corp.,Information Technology
 SYF,Synchrony Financial,Financials
 SNPS,Synopsys Inc.,Information Technology
 SYY,Sysco Corp.,Consumer Staples
@@ -443,10 +417,7 @@ TRV,The Travelers Companies Inc.,Financials
 DIS,The Walt Disney Company,Consumer Discretionary
 TMO,Thermo Fisher Scientific,Health Care
 TIF,Tiffany & Co.,Consumer Discretionary
-TWX,Time Warner Inc.,Consumer Discretionary
 TJX,TJX Companies Inc.,Consumer Discretionary
-TMK,Torchmark Corp.,Financials
-TSS,Total System Services,Information Technology
 TSCO,Tractor Supply Company,Consumer Discretionary
 TDG,TransDigm Group,Industrials
 TRIP,TripAdvisor,Consumer Discretionary
@@ -484,7 +455,6 @@ WM,Waste Management Inc.,Industrials
 WAT,Waters Corporation,Health Care
 WEC,Wec Energy Group Inc,Utilities
 WFC,Wells Fargo,Financials
-HCN,Welltower Inc.,Real Estate
 WDC,Western Digital,Information Technology
 WU,Western Union Co,Information Technology
 WRK,WestRock Company,Materials
@@ -492,12 +462,10 @@ WY,Weyerhaeuser Corp.,Real Estate
 WHR,Whirlpool Corp.,Consumer Discretionary
 WMB,Williams Cos.,Energy
 WLTW,Willis Towers Watson,Financials
-WYN,Wyndham Worldwide,Consumer Discretionary
 WYNN,Wynn Resorts Ltd,Consumer Discretionary
 XEL,Xcel Energy Inc,Utilities
 XRX,Xerox Corp.,Information Technology
 XLNX,Xilinx Inc,Information Technology
-XL,XL Capital,Financials
 XYL,Xylem Inc.,Industrials
 YUM,Yum! Brands Inc,Consumer Discretionary
 ZBH,Zimmer Biomet Holdings,Health Care
