@@ -48,8 +48,8 @@ class CurrencyClass(AssetClass):
                 self.provider.make_request()
                 rate = self.api.get_currency_exchange_rate(currency.ticker, "USD")
             except:
-                print('[DataLink] An error occurred obtaining currency price data... retrying in 1s...')
-                sleep(1)
+                print('[DataLink] An error occurred obtaining currency price data for ' + currency.name + '... retrying shortly...')
+                sleep(local_config.ERROR_WAIT_TIME)
                 continue
             break
         datestamp = dateutil.parser.parse(rate[0]['6. Last Refreshed'])
@@ -79,7 +79,7 @@ class CurrencyClass(AssetClass):
                     self.provider.make_request()
                     daily_data = self.api.get_currency_exchange_daily(currency.ticker, "USD", outputsize=search_type)
                 except:
-                    print('[DataLink] An error occurred obtaining daily currency data... retrying in 1s...')
+                    print('[DataLink] An error occurred obtaining daily currency data for ' + currency.name + '... retrying shortly...')
                     sleep(local_config.ERROR_WAIT_TIME)
                     continue
                 break
@@ -151,8 +151,8 @@ class StocksClass(AssetClass):
                 self.provider.make_request()
                 stocks = self.api.get_batch_stock_quotes(symbols=self.query_values[start_index:max_index])[0]
             except:
-                print('[DataLink] An error occurred obtaining stock price data... retrying in 1s...')
-                sleep(1)
+                print('[DataLink] An error occurred obtaining stock price data for ' + self.query_values[start_index:max_index] + '... retrying shortly...')
+                sleep(local_config.ERROR_WAIT_TIME)
                 continue
             break
         for stock in stocks:
@@ -187,8 +187,8 @@ class StocksClass(AssetClass):
                     self.provider.make_request()
                     daily_data = self.api.get_daily(stock.ticker, outputsize=search_type)
                 except:
-                    print('[DataLink] An error occurred obtaining daily stock data... retrying in 1s...')
-                    sleep(1)
+                    print('[DataLink] An error occurred obtaining daily stock data for ' + stock.ticker + '... retrying shortly...')
+                    sleep(local_config.ERROR_WAIT_TIME)
                     continue
                 break
             candles = []
@@ -243,7 +243,7 @@ class StocksClass(AssetClass):
                 result = csv.reader(csv_file, delimiter=",")
                 counter = 0
                 for row in result:
-                    if counter == 0:
+                    if local_config.LIMIT_ASSETS == False or counter == 0:
                         stock = Stock(ticker=row[0], name=row[1])
                         stock.save()
                     counter += 1
