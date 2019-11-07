@@ -22,7 +22,7 @@ class Asset(Document):
         return Candle.objects(asset=self, interval=interval).order_by('-close_time').first()
 
     def get_daily_candle(self, interval, date):
-        next_day = date+datetime.timedelta(days=2)
+        next_day = date+datetime.timedelta(days=1)
         result_set = Candle.objects(asset=self, interval=interval)
         return result_set.filter(Q(close_time__gte=date) & Q(close_time__lt=next_day)).first()
 
