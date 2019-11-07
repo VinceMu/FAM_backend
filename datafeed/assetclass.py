@@ -92,6 +92,14 @@ class CurrencyClass(AssetClass):
                 if latest_data is not None and datestamp <= latest_data.close_time:
                     break
                 candle = Candle(asset=currency, open=float(entry['1. open']), high=float(entry['2. high']), low=float(entry['3. low']), close=float(entry['4. close']), close_time=datestamp, interval=interval)
+                if candles:
+                    last_candle = candles[-1]
+                    diff = (last_candle.close_time-candle.close_time).total_seconds()/interval
+                    num_candles_required = int(diff-1)
+                    while (num_candles_required > 0):
+                        fake_candle_stamp = candle.close_time + datetime.timedelta(days=num_candles_required)
+                        candles.append(Candle(asset=currency, close=candle.close, close_time=fake_candle_stamp, interval=86400))
+                        num_candles_required -= 1
                 candles.append(candle)
             if candles:
                 Candle.objects.insert(candles)
@@ -194,6 +202,14 @@ class StocksClass(AssetClass):
                 if latest_data is not None and datestamp <= latest_data.close_time:
                     break
                 candle = Candle(asset=stock, open=float(entry['1. open']), high=float(entry['2. high']), low=float(entry['3. low']), close=float(entry['4. close']), volume=float(entry['5. volume']), close_time=datestamp, interval=interval)
+                if candles:
+                    last_candle = candles[-1]
+                    diff = (last_candle.close_time-candle.close_time).total_seconds()/interval
+                    num_candles_required = int(diff-1)
+                    while (num_candles_required > 0):
+                        fake_candle_stamp = candle.close_time + datetime.timedelta(days=num_candles_required)
+                        candles.append(Candle(asset=stock, close=candle.close, close_time=fake_candle_stamp, interval=86400))
+                        num_candles_required -= 1
                 candles.append(candle)
             if candles:
                 Candle.objects.insert(candles)
@@ -206,6 +222,7 @@ class StocksClass(AssetClass):
         p.map(self.grab_daily_history, Stock.objects)
         p.close()
         p.join()
+        #self.create_filler_candles()
 
     def on_interval(self):
         print('[DataLink] Updating live stock prices...')

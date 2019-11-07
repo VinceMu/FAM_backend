@@ -27,11 +27,14 @@ class Asset(Document):
         return result_set.filter(Q(close_time__gte=date) & Q(close_time__lt=next_day)).first()
 
     def get_daily_candles(self, interval, date_start, date_end):
-        if date_start == None or date_end == None:
+        if date_start == None:
             return Candle.objects(asset=self, interval=interval)
         else:
-            result_set = Candle.objects(asset=self, interval=interval)
-            return result_set.filter(Q(close_time__gte=date_start) & Q(close_time__lte=date_end))
+            result_set = Candle.objects(asset=self, interval=interval).order_by('-close_time')
+            if date_end == None:
+                return result_set.filter(Q(close_time__gte=date_start))
+            else:
+                return result_set.filter(Q(close_time__gte=date_start) & Q(close_time__lte=date_end))
 
     def is_closed(self):
         last_update_diff = ((datetime.datetime.utcnow()-self.timestamp).total_seconds())
@@ -95,6 +98,10 @@ class Candle(Document):
     volume = FloatField()
     close_time = DateTimeField()
     interval = IntField()
+
+    meta = {
+        'ordering': ['-close_time']
+    }
 
     def as_dict(self):
         return {

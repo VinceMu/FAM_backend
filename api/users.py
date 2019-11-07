@@ -22,6 +22,60 @@ class UserAssets(Resource):
                 owned_assets.append(asset_ownership.serialize())
             return make_response(jsonify(owned_assets), 200)
 
+@api.route('/portfolio/historical')
+class UserPortfolioHistorical(Resource):
+    @jwt_required
+    def get(self):
+        user = User.objects(email=get_jwt_identity()).first()
+        if user == None:
+            return abort(401, "forbidden")
+        value = {}
+        spent_value = {}
+        earliest_date = None
+        loop_end_date = datetime.datetime.now().date()
+        for transaction in user.assets:
+            date_purchased = transaction.date_purchased.date() if (transaction.date_purchased != None) else None
+            if earliest_date == None or date_purchased < earliest_date:
+                earliest_date = date_purchased
+            date_sold = (transaction.date_sold.date()+datetime.timedelta(days=1)) if (transaction.date_sold != None) else None
+            candles = transaction.asset.get_daily_candles(86400, date_purchased, date_sold)
+            start_price = candles[len(candles)-1].close
+            if len(candles) == 1:
+                end_price = start_price
+            else:
+                end_price = candles[0].close
+            for candle in candles:
+                tag = str(candle.close_time.date())
+                if tag in value:
+                    value[tag] = value[tag] + (candle.close * transaction.quantity)
+                    spent_value[tag] = spent_value[tag] - (transaction.quantity * start_price)
+                else:
+                    value[tag] = (candle.close * transaction.quantity)
+                    spent_value[tag] = -(transaction.quantity * start_price)
+            if date_sold != None:
+                loop_start_date = date_sold
+                while loop_start_date < loop_end_date:
+                    other_tag = str(loop_start_date)
+                    if other_tag in spent_value:
+                        spent_value[other_tag] = spent_value[other_tag] + (transaction.quantity * (end_price - start_price))
+                    else:
+                        spent_value[other_tag] = (transaction.quantity * (end_price - start_price))
+                    loop_start_date = loop_start_date + datetime.timedelta(days=1)
+        result = {}
+        # Check all date values have been filled and combined
+        while earliest_date < loop_end_date:
+            mytag = str(earliest_date)
+            if mytag not in value:
+                value[mytag] = 0
+            result[mytag] = {
+                "purchase_value": spent_value[mytag],
+                "net_value": value[mytag] + spent_value[mytag],
+                "value": value[mytag]
+            }
+            earliest_date = earliest_date + datetime.timedelta(days=1)
+        return make_response(jsonify(result), 200)
+        
+
 update_parser = api.parser()
 update_parser.add_argument("fullname", type=str, required=False, help="The full name of the user", location="json")
 update_parser.add_argument("currency_id", type=str, required=False, help="The ID of the base currency to be used", location="json")
