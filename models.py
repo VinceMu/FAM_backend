@@ -69,6 +69,13 @@ class AssetOwnership(Document):
     date_purchased = DateTimeField(required=True)
     date_sold = DateTimeField()
 
+    meta = {
+        'indexes': [
+            'user',
+            'asset'
+        ]
+    }
+
     def serialize(self):
         fields = {}
         fields['id'] = str(self.pk)
@@ -89,6 +96,12 @@ class Auth(Document):
 class AuthRevokedToken(Document):
     jti = StringField(required=True, unique=True)
 
+    meta = {
+        'indexes': [
+            'jti'
+        ]
+    }
+
 class Candle(Document):
     asset = LazyReferenceField(Asset, required=True)
     open = FloatField()
@@ -100,7 +113,12 @@ class Candle(Document):
     interval = IntField()
 
     meta = {
-        'ordering': ['-close_time']
+        'ordering': ['-close_time'],
+        'indexes': [
+            'asset',
+            'close_time',
+            'interval'
+        ]
     }
 
     def as_dict(self):
