@@ -80,7 +80,7 @@ class CurrencyClass(AssetClass):
                     daily_data = self.api.get_currency_exchange_daily(currency.ticker, "USD", outputsize=search_type)
                 except:
                     print('[DataLink] An error occurred obtaining daily currency data... retrying in 1s...')
-                    sleep(1)
+                    sleep(local_config.ERROR_WAIT_TIME)
                     continue
                 break
             candles = []
@@ -95,7 +95,7 @@ class CurrencyClass(AssetClass):
                 if candles:
                     last_candle = candles[-1]
                     diff = (last_candle.close_time-candle.close_time).total_seconds()/interval
-                    num_candles_required = int(diff-1)
+                    num_candles_required = int(round(diff-1))
                     while (num_candles_required > 0):
                         fake_candle_stamp = candle.close_time + datetime.timedelta(days=num_candles_required)
                         candles.append(Candle(asset=currency, close=candle.close, close_time=fake_candle_stamp, interval=86400))
@@ -109,14 +109,14 @@ class CurrencyClass(AssetClass):
 
 
     def on_daily(self):
-        p = mp.Pool(10)
+        p = mp.Pool(local_config.WORKER_THREADS)
         p.map(self.grab_daily_history, Currency.objects)
         p.close()
         p.join()
 
     def on_interval(self):
         print('[DataLink] Updating live currency prices...')
-        p = mp.Pool(10)
+        p = mp.Pool(local_config.WORKER_THREADS)
         p.map(self.grab_price, Currency.objects)
         p.close()
         p.join()
@@ -205,7 +205,7 @@ class StocksClass(AssetClass):
                 if candles:
                     last_candle = candles[-1]
                     diff = (last_candle.close_time-candle.close_time).total_seconds()/interval
-                    num_candles_required = int(diff-1)
+                    num_candles_required = int(round(diff-1))
                     while (num_candles_required > 0):
                         fake_candle_stamp = candle.close_time + datetime.timedelta(days=num_candles_required)
                         candles.append(Candle(asset=stock, close=candle.close, close_time=fake_candle_stamp, interval=86400))
@@ -218,7 +218,7 @@ class StocksClass(AssetClass):
             print('[DataLink] No update required on data for ' + stock.name + " (" + stock.ticker + ")")
 
     def on_daily(self):
-        p = mp.Pool(10)
+        p = mp.Pool(local_config.WORKER_THREADS)
         p.map(self.grab_daily_history, Stock.objects)
         p.close()
         p.join()
@@ -231,7 +231,7 @@ class StocksClass(AssetClass):
         while start_index < len(self.query_values):
             array.append(start_index)
             start_index += self.max_bulk_query
-        p = mp.Pool(10)
+        p = mp.Pool(local_config.WORKER_THREADS)
         p.map(self.grab_price, array)
         p.close()
         p.join()
