@@ -95,7 +95,7 @@ class CurrencyClass(AssetClass):
                 if candles:
                     last_candle = candles[-1]
                     diff = (last_candle.close_time-candle.close_time).total_seconds()/interval
-                    num_candles_required = int(diff-1)
+                    num_candles_required = int(round(diff-1))
                     while (num_candles_required > 0):
                         fake_candle_stamp = candle.close_time + datetime.timedelta(days=num_candles_required)
                         candles.append(Candle(asset=currency, close=candle.close, close_time=fake_candle_stamp, interval=86400))
@@ -205,7 +205,7 @@ class StocksClass(AssetClass):
                 if candles:
                     last_candle = candles[-1]
                     diff = (last_candle.close_time-candle.close_time).total_seconds()/interval
-                    num_candles_required = int(diff-1)
+                    num_candles_required = int(round(diff-1))
                     while (num_candles_required > 0):
                         fake_candle_stamp = candle.close_time + datetime.timedelta(days=num_candles_required)
                         candles.append(Candle(asset=stock, close=candle.close, close_time=fake_candle_stamp, interval=86400))
