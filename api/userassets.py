@@ -74,3 +74,31 @@ class GetAssets(Resource):
 class GetAvailableAssets(Resource):
     def post(self):
         return make_response(jsonify(Asset.objects.all().to_json()), 201)
+    
+    
+view_date_parser = api.parser()
+view_date_parser.add_argument("date", type=str, required=True, help="The date you want to view each AssetOwnership", location="json")
+
+@api.route('/asset/historical')
+class ViewDate(Resource):
+    @jwt_required
+    @api.expect(view_date_parser)
+    def view(self):
+        args = view_date_parser.parse_args()
+        user = User.objects(email=get_jwt_identity()).first()
+        if user is None:
+            return abort(401, "forbidden")
+        else:
+            print_assets = []
+            # get the value of each asset 
+            # at certain point in time ie date
+
+            try:
+                date = dateutil.parser.parse(args['date'])
+            except:
+                abort(400, "invalid date")
+
+            for asset_ownership in user.assets:
+                candle = asset.get_daily_candle(date)
+                print_assets.append(candle.serialize())
+            return make_response(jsonify(print_assets), 200)
