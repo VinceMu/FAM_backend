@@ -6,7 +6,6 @@ class Asset(Document):
     name = StringField(required=True)
     price = FloatField()
     timestamp = DateTimeField()
-    historical_data = LazyReferenceField('HistoricalData')
     meta = {'allow_inheritance': True}
 
     def get_candles(self):
@@ -76,6 +75,28 @@ class AssetOwnership(Document):
         ]
     }
 
+    def get_buy_price(self):
+        candle = self.asset.get_daily_candle(86400, self.date_purchased)
+        if candle is None:
+            return None
+        else:
+            return candle.close
+
+    def get_profit_percentage(self):
+        buy_price = self.get_buy_price()
+        sell_price = self.get_sell_price()
+        if buy_price is None:
+            return None
+        else:
+            return ((sell_price-buy_price)/buy_price)*100
+
+    def get_sell_price(self):
+        if self.date_sold == None:
+            return self.asset.price
+        else:
+            candle = self.asset.get_daily_candle(86400, self.date_sold)
+            return candle.close
+
     def serialize(self):
         fields = {}
         fields['id'] = str(self.pk)
@@ -86,6 +107,7 @@ class AssetOwnership(Document):
         fields['quantity'] = self.quantity
         fields['date_purchased'] = self.date_purchased
         fields['date_sold'] = self.date_sold
+        fields['profit_percent'] = self.get_profit_percentage()
         return fields
 
 class Auth(Document):
@@ -151,3 +173,7 @@ class User(Document):
     base_currency = ReferenceField(Currency)
     picture = FileField()
     assets = ListField(ReferenceField(AssetOwnership))
+
+    def get_portfolio_outliers(self):
+        newlist = sorted(self.assets.all(), key=lambda x: x.get_profit_percentage())
+        return newlist
