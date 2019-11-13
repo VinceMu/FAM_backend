@@ -174,6 +174,13 @@ class User(Document):
     picture = FileField()
     assets = ListField(ReferenceField(AssetOwnership))
 
+    def as_dict(self):
+        return {
+            "email": self.email,
+            "fullname": self.fullname,
+            "base_currency": self.base_currency
+        }
+
     def get_portfolio_outliers(self):
         newlist = sorted(self.assets.all(), key=lambda x: x.get_profit_percentage())
         return newlist
