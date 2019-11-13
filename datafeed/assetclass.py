@@ -196,7 +196,7 @@ class StocksClass(AssetClass):
                 entry = daily_data[0][part]
                 datestamp = dateutil.parser.parse(part)
                 datestamp = datestamp.replace(tzinfo=tz.gettz("US/Eastern"))
-                datestamp = datestamp.astimezone(UTC)
+                datestamp = datestamp.astimezone(UTC).replace(tzinfo=None)
                 if datestamp.date() == datetime.datetime.utcnow().date():
                     continue
                 if latest_data is not None and datestamp <= latest_data.close_time:
