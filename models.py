@@ -82,9 +82,7 @@ class AssetOwnership(Document):
         else:
             return candle.close
 
-    def get_profit_percentage(self):
-        buy_price = self.get_buy_price()
-        sell_price = self.get_sell_price()
+    def get_profit_percentage(self, buy_price, sell_price):
         if buy_price is None:
             return None
         else:
@@ -107,7 +105,9 @@ class AssetOwnership(Document):
         fields['quantity'] = self.quantity
         fields['date_purchased'] = self.date_purchased
         fields['date_sold'] = self.date_sold
-        fields['profit_percent'] = self.get_profit_percentage()
+        fields['price_buy'] = self.get_buy_price()
+        fields['price_sold'] = self.get_sell_price()
+        fields['profit_percent'] = self.get_profit_percentage(fields['price_buy'], fields['price_sold'])
         return fields
 
 class Auth(Document):
