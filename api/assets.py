@@ -87,7 +87,22 @@ class ReadAssets(Resource):
             results.append(asset.serialize())
         return make_response(jsonify(results), 201)
     
+PERFORMANCE_STATS_PARSER = api.parser()
+PERFORMANCE_STATS_PARSER.add_argument('asset_id', type=str, required=True, help='The ID of the asset', location='args')
 @api.route('/performance/stats')
 class AssetStats(Resource):
+    @jwt_required
+    @api.expect(PERFORMANCE_STATS_PARSER)
     def get(self):
+        args = PERFORMANCE_STATS_PARSER.parse_args()
+        if ObjectId.is_valid(args['asset_id']) == False:
+            return abort(400, "invalid asset id")
+        asset = Asset.objects(id=args['asset_id']).first()
+        if asset == None:
+            return abort(400, "invalid asset")
+
+        """
+        calculations on asset to get change 
+        over 1 day, 1 wk, 1 mnth, 3 mth, 6 mth, 1y, etc?
+        """
         return("assets stats - provide a % change over 1day, 1wk, 1 mnth, 3mth, 6mth, 1y, etc")
