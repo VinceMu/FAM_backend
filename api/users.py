@@ -1,4 +1,4 @@
-from flask import make_response, jsonify
+from flask import make_response, jsonify, send_file
 from flask_restplus import Namespace, Resource, fields, abort
 from flask_jwt_extended import get_jwt_identity, jwt_required
 from bson import ObjectId
@@ -104,7 +104,30 @@ class UserPortfolioHistorical(Resource):
             }
             earliest_date = earliest_date + datetime.timedelta(days=1)
         return make_response(jsonify(result), 200)
-        
+
+@api.route('/read_picture')
+class ReadPictureUser(Resource):
+    @jwt_required
+    def get(self):
+        user = User.objects(email=get_jwt_identity()).first()
+        if user is None:
+            return abort(401, "forbidden")
+        content = user.picture.read()
+        if content == None:
+            return abort(404, "no image")
+        response = make_response(content)
+        response.headers.set("Content-Type", user.picture.content_type)
+        response.headers.set("Content-Disposition", "attachment", filename=user.picture.filename)
+        return response
+
+@api.route('/read')
+class ReadUser(Resource):
+    @jwt_required
+    def get(self):
+        user = User.objects(email=get_jwt_identity()).first()
+        if user is None:
+            return abort(401, "forbidden")
+        return make_response(jsonify(user.as_dict()), 200)
 
 update_parser = api.parser()
 update_parser.add_argument("fullname", type=str, required=False, help="The full name of the user", location="json")

@@ -377,6 +377,13 @@ class User(Document):
         response.headers.set("Content-Disposition", "attachment", filename=self.picture.filename)
         return response
 
+    def as_dict(self):
+        return {
+            "email": self.email,
+            "fullname": self.fullname,
+            "base_currency": self.base_currency
+        }
+
     def get_portfolio_outliers(self):
         newlist = sorted(self.get_assets().all(), key=lambda x: x.get_profit_percent())
         return newlist
