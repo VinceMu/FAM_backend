@@ -5,14 +5,17 @@ from threading import Lock
 class Provider(ABC):
 
     # Get the number of requests permitted per minute
+    @abstractmethod
     def get_limit(self):
         pass
 
     # Get the name of the data provider
+    @abstractmethod
     def get_name(self):
         pass
 
     # Check whether we are able to make the request given our limitations
+    @abstractmethod
     def make_request(self):
         pass
 

@@ -1,12 +1,17 @@
 import os
+import logging
 
 MONGODB = "mongodb://localhost"
 DB = "fam"
 TOKEN_EXPIRY = False
 PORT = 5000
-JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY","fam")
+JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "fam")
 REFRESH_INTERVAL = 600
 WORKER_THREADS = 10
 ERROR_WAIT_TIME = 10
+MAX_RETRIES = 5
 LIMIT_ASSETS = True
+LIMIT_ASSETS_QUANTITY = 10
+DATA_LOGGER = logging.getLogger("DataLink")
+REST_LOGGER = logging.getLogger("REST")
 os.environ['ALPHAVANTAGE_API_KEY'] = "[insert key here]"

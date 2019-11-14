@@ -1,254 +1,493 @@
 from abc import ABC, abstractmethod
-from models import *
+from models import Asset, Candle, Currency, Interval, Stock
 from datafeed.provider import *
 from alpha_vantage.foreignexchange import ForeignExchange
 from alpha_vantage.timeseries import TimeSeries
-import csv, urllib, requests, io, local_config, json
-import dateutil.parser, datetime
+import csv, urllib, requests, io, json
+import local_config as CONFIG
+import dateutil.parser
+import datetime
 from dateutil.tz import UTC
 import dateutil.tz as tz
 import multiprocessing.dummy as mp
 
+DAILY_COMPACT_THRESHOLD = 99
+DAILY_MAX_RETRIES = 5
+DAILY_SYNC_COMPACT = "compact"
+DAILY_SYNC_FULL = "full"
+DAILY_UPDATE_INTERVAL = 2
+MAX_BULK_QUERY = 100
+
 class AssetClass(ABC):
+    def __init__(self, provider):
+        self.provider = provider
+        self.updaters = []
+
     # Returns the name of the asset class
+    @abstractmethod
     def get_name(self):
         pass
 
     # Returns the name of the data provider for this asset class
+    @abstractmethod
     def get_provider(self):
-        pass
-
-    # Method called daily to update pricings
-    def on_daily(self):
-        pass
+        if self.provider == None:
+            return None
+        return self.provider.get_name()
 
     # Method called at a select interval to update data for the asset class
+    @abstractmethod
     def on_interval(self):
-        pass
+        for updater in self.updaters:
+            if updater.requires_update():
+                updater.do_update()
 
     # Method called on application startup to query the relevant API for data
+    @abstractmethod
     def on_startup(self):
         pass
+
+class IntervalUpdater(ABC):
+    def __init__(self, api, provider):
+        self.api = api
+        self.interval = Interval.Day
+        self.last_update = None
+        self.provider = provider
+
+    # Method called to perform the update for the given interval
+    @abstractmethod
+    def do_update(self):
+        pass
+
+    # Returns whether this interval requires updating at the given time
+    @abstractmethod
+    def requires_update(self):
+        if self.last_update is None:
+            return True
+        diff = (datetime.datetime.utcnow() - self.last_update).total_seconds()
+        return diff >= self.interval
 
 class CurrencyClass(AssetClass):
 
     def __init__(self, provider):
+        super(CurrencyClass, self).__init__(provider)
         self.api = ForeignExchange()
-        self.provider = provider
+        self.updaters = []
 
     def get_name(self):
         return "Currency"
 
-    def get_provider(self):
-        return self.provider.get_name()
-
-    def grab_price(self, currency):
-        while True:
-            try:
-                self.provider.make_request()
-                rate = self.api.get_currency_exchange_rate(currency.ticker, "USD")
-            except:
-                print('[DataLink] An error occurred obtaining currency price data for ' + currency.name + '... retrying shortly...')
-                sleep(local_config.ERROR_WAIT_TIME)
-                continue
-            break
-        datestamp = dateutil.parser.parse(rate[0]['6. Last Refreshed'])
-        datestamp = datestamp.replace(tzinfo=UTC)
-        currency.price = float(rate[0]['5. Exchange Rate'])
-        currency.timestamp = datestamp
-        currency.save()
-
-    def grab_daily_history(self, currency):
-        interval = 86400
-        latest_data = currency.get_last_candle_interval(interval)
-        search_type = None
-        if latest_data is not None:
-            diff = ((datetime.datetime.utcnow()-latest_data.close_time).total_seconds())/interval
-            # Will force an update check after the daily close
-            if diff >= 2:
-                if diff > 99:
-                    search_type = "full"
-                else:
-                    search_type = "compact"
-        else:
-            search_type = "full"
-        if search_type is not None:
-            print('[DataLink] Downloading all daily data for ' + currency.name + " (" + currency.ticker + ")")
-            while True:
-                try:
-                    self.provider.make_request()
-                    daily_data = self.api.get_currency_exchange_daily(currency.ticker, "USD", outputsize=search_type)
-                except:
-                    print('[DataLink] An error occurred obtaining daily currency data for ' + currency.name + '... retrying shortly...')
-                    sleep(local_config.ERROR_WAIT_TIME)
-                    continue
-                break
-            candles = []
-            for part in daily_data[0]:
-                entry = daily_data[0][part]
-                datestamp = dateutil.parser.parse(part)
-                if datestamp.date() == datetime.datetime.utcnow().date():
-                    continue
-                if latest_data is not None and datestamp <= latest_data.close_time:
-                    break
-                candle = Candle(asset=currency, open=float(entry['1. open']), high=float(entry['2. high']), low=float(entry['3. low']), close=float(entry['4. close']), close_time=datestamp, interval=interval)
-                if candles:
-                    last_candle = candles[-1]
-                    diff = (last_candle.close_time-candle.close_time).total_seconds()/interval
-                    num_candles_required = int(round(diff-1))
-                    while (num_candles_required > 0):
-                        fake_candle_stamp = candle.close_time + datetime.timedelta(days=num_candles_required)
-                        candles.append(Candle(asset=currency, close=candle.close, close_time=fake_candle_stamp, interval=86400))
-                        num_candles_required -= 1
-                candles.append(candle)
-            if candles:
-                Candle.objects.insert(candles)
-            print('[DataLink] Finished downloading data for ' + currency.name + " (" + currency.ticker + ")")
-        else:
-            print('[DataLink] No update required on data for ' + currency.name + " (" + currency.ticker + ")")
-
-
-    def on_daily(self):
-        p = mp.Pool(local_config.WORKER_THREADS)
-        p.map(self.grab_daily_history, Currency.objects)
-        p.close()
-        p.join()
-
-    def on_interval(self):
-        print('[DataLink] Updating live currency prices...')
-        p = mp.Pool(local_config.WORKER_THREADS)
-        p.map(self.grab_price, Currency.objects)
-        p.close()
-        p.join()
-        print('[DataLink] Update complete!')
-
     def on_startup(self):
-        if len(Currency.objects) == 0:
+        full_load = (len(Currency.objects) == 0)
+        currencies = []
+        try:
             with open("datafeed/defaults/supported_currencies.csv") as csv_file:
                 result = csv.reader(csv_file,delimiter=',')
                 for row in result:
-                    currency = Currency(ticker=row[0], name=row[1])
-                    currency.save()
+                    if not full_load:
+                        search = Currency.objects(ticker=row[0], name=row[1]).first()
+                    if full_load or search == None:
+                        currency = Currency(ticker=row[0], name=row[1])
+                        currencies.append(currency)
+        except Exception as ex:
+            CONFIG.DATA_LOGGER.error("CurrencyClass -> on_startup() -> 1")
+            CONFIG.DATA_LOGGER.exception(str(ex))
+        if currencies:
+            Currency.objects.insert(currencies)
+        self.updaters.append(CurrencyUpdaterLive(self.api, self.provider))
+        self.updaters.append(CurrencyUpdaterDaily(self.api, self.provider))
 
-class StocksClass(AssetClass):
+class CurrencyUpdaterDaily(IntervalUpdater):
+    def __init__(self, api, provider):
+        self.api = api
+        self.interval = Interval.Hour
+        self.last_update = None
+        self.name = "Daily"
+        self.provider = provider
+
+    def do_update(self):
+        pool = mp.Pool(CONFIG.WORKER_THREADS)
+        pool.map(self.sync_asset, Currency.objects)
+        pool.close()
+        pool.join()
+
+    def sync_asset(self, asset: Asset):
+        # Get the last updated candle
+        latest_candle = asset.get_last_candle()
+        # By default we won't update
+        sync_type = None
+        if latest_candle is not None:
+            curr_time = datetime.datetime.utcnow()
+            # Calculate how many days ago the last full synced candle was
+            diff = (curr_time-latest_candle.get_open_time()).total_seconds()/self.interval
+            # Only update if it is greater than the update interval (2 days - as it is open)
+            if diff > DAILY_UPDATE_INTERVAL:
+                # Compact sync will only return last 100 candles, so to reduce network usage
+                # only sync what we need to
+                if diff >= DAILY_COMPACT_THRESHOLD:
+                    sync_type = DAILY_SYNC_FULL
+                else:
+                    sync_type = DAILY_SYNC_COMPACT
+        else:
+            # If we have no Candles in the dataset, we need to do a full sync
+            sync_type = DAILY_SYNC_FULL
+        # Return success in syncing 0 results
+        if sync_type is None:
+            return [True, 0]
+        counter = 0
+        # Ensure we haven't attempted to sync too many times with failing
+        while counter < DAILY_MAX_RETRIES:
+            try:
+                # Notify the provider we intend on making the request - ensure we are under quotas
+                self.provider.make_request()
+                # Make the request with the given ticker
+                data = self.api.get_currency_exchange_daily(asset.get_ticker())
+            except Exception as ex:
+                # Log the details of the error if we fail
+                CONFIG.DATA_LOGGER.error("CurrencyUpdaterDaily -> sync_asset() -> 1")
+                CONFIG.DATA_LOGGER.error(repr(asset))
+                CONFIG.DATA_LOGGER.exception(str(ex))
+                # Wait for specified time by configuration
+                sleep(CONFIG.ERROR_WAIT_TIME)
+                # Increment the number of failures
+                counter += 1
+                continue
+            break
+        # If no data was returned, notify that we failed to sync the data
+        if data is None:
+            return [False, 0]
+        candles = []
+        # Loop through all the days in the response
+        for date in data[0]:
+            # Extract the data for a particular day in the JSON
+            candle_data = data[0][date]
+            if candle_data is None:
+                # Log the details of the error if we get a None response here
+                CONFIG.DATA_LOGGER.error("CurrencyUpdaterDaily -> sync_asset() -> 2")
+                CONFIG.DATA_LOGGER.error(repr(asset))
+                CONFIG.DATA_LOGGER.error(date)
+                # Terminate syncing this asset
+                return [False, 0]
+            try:
+                datestamp = dateutil.parser.parse(date)
+            except Exception as ex:
+                CONFIG.DATA_LOGGER.error("CurrencyUpdaterDaily -> sync_asset() -> 3")
+                CONFIG.DATA_LOGGER.error(repr(asset))
+                CONFIG.DATA_LOGGER.error(date)
+                return [False, 0]
+            if datestamp is None:
+                # Log the details of the error if we fail to parse the date
+                CONFIG.DATA_LOGGER.error("CurrencyUpdaterDaily -> sync_asset() -> 4")
+                CONFIG.DATA_LOGGER.error(repr(asset))
+                CONFIG.DATA_LOGGER.error(date)
+                # Terminate syncing this asset
+                return [False, 0]
+            # Don't sync daily data for the current date (candle incomplete)
+            if datestamp.date() == datetime.datetime.utcnow().date():
+                continue
+            # If we find a candle stamped prior to our most recently updated one,
+            # then we know we can terminate parsing the response here
+            if latest_candle is not None and datestamp <= latest_candle.get_open_time():
+                break
+            try:
+                # Try and parse all the elements to create the candle object
+                candle = Candle(asset=asset, open=float(candle_data['1. open']), high=float(candle_data['2. high']), low=float(candle_data['3. low']), close=float(candle_data['4. close']), open_time=datestamp, interval=self.interval)
+            except Exception as ex:
+                # If we fail, log all the details of the error
+                CONFIG.DATA_LOGGER.error("CurrencyUpdaterDaily -> sync_asset() -> 5")
+                CONFIG.DATA_LOGGER.error(repr(asset))
+                CONFIG.DATA_LOGGER.exception(str(ex))
+                # Terminate syncing this asset
+                return [False, 0]
+            # If we have already parsed a candle already from the response
+            if candles:
+                # Then grab the date of the candle
+                target_day = candles[-1].get_open_time().date()
+            else:
+                # Otherwise grab the current date
+                target_day = datetime.datetime.utcnow().date()
+            # Calculate the potential 'filler' candle - i.e. if we have a weekend or closed trading day
+            filler_candle_stamp = candle.get_open_time() + datetime.timedelta(days=1)
+            # Loop over the days between the candle date and the target date
+            while (filler_candle_stamp.date() != target_day):
+                # Add the filler candles with closes set to the earliest candle
+                candles.append(Candle(asset=asset, close=candle.get_close(), open_time=filler_candle_stamp, interval=self.interval))
+                filler_candle_stamp = filler_candle_stamp + datetime.timedelta(days=1)
+            # Finally append the original candle (to maintain the insertion order)
+            candles.append(candle)
+        if candles:
+            # if we have candles to insert, then insert them all now
+            Candle.objects.insert(candles)
+
+class CurrencyUpdaterLive:
+    def __init__(self, api, provider):
+        self.api = api
+        self.interval = Interval.Minute
+        self.last_update = None
+        self.name = "Live"
+        self.provider = provider
+
+    def do_update(self):
+        pool = mp.Pool(CONFIG.WORKER_THREADS)
+        pool.map(self.sync_asset, Currency.objects)
+        pool.close()
+        pool.join()
+
+    def sync_asset(self, asset: Asset):
+        counter = 0
+        while (counter < CONFIG.MAX_RETRIES):
+            try:
+                self.provider.make_request()
+                data = self.api.get_currency_exchange_rate(asset.get_ticker(), "USD")
+            except Exception as ex:
+                CONFIG.DATA_LOGGER.error("CurrencyUpdaterLive -> sync_asset() -> 1")
+                CONFIG.DATA_LOGGER.error(repr(asset))
+                CONFIG.DATA_LOGGER.exception(str(ex))
+                sleep(CONFIG.ERROR_WAIT_TIME)
+                counter += 1
+                continue
+        if data is None:
+            return [False, 0]
+        try:
+            datestamp = dateutil.parser.parse(data[0]['6. Last Refreshed'])
+            datestamp = datestamp.replace(tzinfo=UTC)
+        except Exception as ex:
+            CONFIG.DATA_LOGGER.error("CurrencyUpdaterLive -> sync_asset() -> 2")
+            CONFIG.DATA_LOGGER.error(repr(asset))
+            CONFIG.DATA_LOGGER.exception(str(ex))
+            return [False, 0]
+        if datestamp is None:
+            CONFIG.DATA_LOGGER.error("CurrencyUpdaterLive -> sync_asset() -> 3")
+            CONFIG.DATA_LOGGER.error(repr(asset))
+            CONFIG.DATA_LOGGER.error(data[0]['6. Last Refreshed'])
+            return [False, 0]
+        try:
+            asset.set_price(data[0]['5. Exchange Rate'])
+        except Exception as ex:
+            CONFIG.DATA_LOGGER.error("CurrencyUpdaterLive -> sync_asset() -> 4")
+            CONFIG.DATA_LOGGER.error(repr(asset))
+            CONFIG.DATA_LOGGER.exception(str(ex))
+            return [False, 0]
+        asset.set_price_timestamp(datestamp)
+        asset.save()
+
+class StockClass(AssetClass):
 
     def __init__(self, provider):
         self.api = TimeSeries()
-        self.max_bulk_query = 100
         self.provider = provider
-        self.query_values = []
+        self.updaters = []
 
     def get_name(self):
         return "Stocks"
 
-    def get_provider(self):
-        return self.provider.get_name()
+    def on_startup(self):
+        full_load = (len(Stock.objects) == 0)
+        stocks = []
+        try:
+            with open("datafeed/defaults/supported_stocks.csv") as csv_file:
+                result = csv.reader(csv_file,delimiter=',')
+                for row in result:
+                    if not full_load:
+                        search = Stock.objects(ticker=row[0], name=row[1]).first()
+                    if full_load or search == None:
+                        stock = Stock(ticker=row[0], name=row[1])
+                        stocks.append(stock)
+                    if CONFIG.LIMIT_ASSETS and len(stocks) > CONFIG.LIMIT_ASSETS_QUANTITY:
+                        break
+        except Exception as ex:
+            CONFIG.DATA_LOGGER.error("StockClass -> on_startup() -> 1")
+            CONFIG.DATA_LOGGER.exception(str(ex))
+        Stock.objects.insert(stocks)
+        self.updaters.append(StockUpdaterLive(self.api, self.provider))
+        self.updaters.append(StockUpdaterDaily(self.api, self.provider))
 
-    def grab_price(self, start_index):
-        max_index = min(len(self.query_values), start_index+self.max_bulk_query)
-        while True:
+class StockUpdaterDaily(IntervalUpdater):
+    def __init__(self, api, provider):
+        self.api = api
+        self.interval = Interval.Hour
+        self.last_update = None
+        self.name = "Daily"
+        self.provider = provider
+
+    def do_update(self):
+        pool = mp.Pool(CONFIG.WORKER_THREADS)
+        pool.map(self.sync_asset, Stock.objects)
+        pool.close()
+        pool.join()
+
+    def sync_asset(self, asset: Asset):
+        # Get the last updated candle
+        latest_candle = asset.get_last_candle()
+        # By default we won't update
+        sync_type = None
+        if latest_candle is not None:
+            curr_time = datetime.datetime.utcnow()
+            # Calculate how many days ago the last full synced candle was
+            diff = (curr_time-latest_candle.get_open_time()).total_seconds()/self.interval
+            # Only update if it is greater than the update interval (2 days - as it is open)
+            if diff > DAILY_UPDATE_INTERVAL:
+                # Compact sync will only return last 100 candles, so to reduce network usage
+                # only sync what we need to
+                if diff >= DAILY_COMPACT_THRESHOLD:
+                    sync_type = DAILY_SYNC_FULL
+                else:
+                    sync_type = DAILY_SYNC_COMPACT
+        else:
+            # If we have no Candles in the dataset, we need to do a full sync
+            sync_type = DAILY_SYNC_FULL
+        # Return success in syncing 0 results
+        if sync_type is None:
+            return [True, 0]
+        counter = 0
+        # Ensure we haven't attempted to sync too many times with failing
+        while counter < DAILY_MAX_RETRIES:
             try:
+                # Notify the provider we intend on making the request - ensure we are under quotas
                 self.provider.make_request()
-                stocks = self.api.get_batch_stock_quotes(symbols=self.query_values[start_index:max_index])[0]
-            except:
-                print('[DataLink] An error occurred obtaining stock price data for ' + self.query_values[start_index:max_index] + '... retrying shortly...')
-                sleep(local_config.ERROR_WAIT_TIME)
+                # Make the request with the given ticker
+                data = self.api.get_daily(asset.get_ticker(), outputsize=sync_type)
+            except Exception as ex:
+                # Log the details of the error if we fail
+                CONFIG.DATA_LOGGER.error("StockUpdaterDaily -> sync_asset() -> 1")
+                CONFIG.DATA_LOGGER.error(repr(asset))
+                CONFIG.DATA_LOGGER.exception(str(ex))
+                # Wait for specified time by configuration
+                sleep(CONFIG.ERROR_WAIT_TIME)
+                # Increment the number of failures
+                counter += 1
                 continue
             break
-        for stock in stocks:
-            datestamp = dateutil.parser.parse(stock['4. timestamp'])
-            datestamp = datestamp.replace(tzinfo=tz.gettz("US/Eastern"))
-            datestamp = datestamp.astimezone(UTC)
-            Stock.objects(ticker=stock['1. symbol']).update(price=float(stock['2. price']), timestamp=datestamp)
-
-    def grab_daily_history(self, stock):
-        interval = 86400
-        latest_data = stock.get_last_candle_interval(interval)
-        search_type = None
-        if latest_data is not None:
-            last_update_diff = ((datetime.datetime.utcnow()-stock.timestamp).total_seconds())
-            # Only update daily data if the market has been closed for 30 minutes at least
-            if last_update_diff > 1800:
-                latest_date = latest_data.close_time.date()
-                # Check if the latest daily date matches the data from the last update retrieved
-                if latest_date < stock.timestamp.date():
-                    # Approximate the date difference to determine the type of search to perform
-                    diff = ((datetime.datetime.utcnow()-latest_data.close_time).total_seconds())/interval
-                    if diff > 99:
-                        search_type = "full"
-                    else:
-                        search_type = "compact"
-        else:
-            search_type = "full"
-        if search_type is not None:
-            print('[DataLink] Downloading all daily data for ' + stock.name + " (" + stock.ticker + ")")
-            while True:
-                try:
-                    self.provider.make_request()
-                    daily_data = self.api.get_daily(stock.ticker, outputsize=search_type)
-                except:
-                    print('[DataLink] An error occurred obtaining daily stock data for ' + stock.ticker + '... retrying shortly...')
-                    sleep(local_config.ERROR_WAIT_TIME)
-                    continue
-                break
-            candles = []
-            for part in daily_data[0]:
-                entry = daily_data[0][part]
-                datestamp = dateutil.parser.parse(part)
+        # If no data was returned, notify that we failed to sync the data
+        if data is None:
+            return [False, 0]
+        candles = []
+        # Loop through all the days in the response
+        for date in data[0]:
+            # Extract the data for a particular day in the JSON
+            candle_data = data[0][date]
+            if candle_data is None:
+                # Log the details of the error if we get a None response here
+                CONFIG.DATA_LOGGER.error("StockUpdaterDaily -> sync_asset() -> 2")
+                CONFIG.DATA_LOGGER.error(repr(asset))
+                CONFIG.DATA_LOGGER.error(date)
+                # Terminate syncing this asset
+                return [False, 0]
+            try:
+                datestamp = dateutil.parser.parse(date)
                 datestamp = datestamp.replace(tzinfo=tz.gettz("US/Eastern"))
                 datestamp = datestamp.astimezone(UTC).replace(tzinfo=None)
-                if datestamp.date() == datetime.datetime.utcnow().date():
-                    continue
-                if latest_data is not None and datestamp <= latest_data.close_time:
-                    break
-                candle = Candle(asset=stock, open=float(entry['1. open']), high=float(entry['2. high']), low=float(entry['3. low']), close=float(entry['4. close']), volume=float(entry['5. volume']), close_time=datestamp, interval=interval)
-                if candles:
-                    last_candle = candles[-1]
-                    diff = (last_candle.close_time-candle.close_time).total_seconds()/interval
-                    num_candles_required = int(round(diff-1))
-                    while (num_candles_required > 0):
-                        fake_candle_stamp = candle.close_time + datetime.timedelta(days=num_candles_required)
-                        candles.append(Candle(asset=stock, close=candle.close, close_time=fake_candle_stamp, interval=86400))
-                        num_candles_required -= 1
-                candles.append(candle)
+            except Exception as ex:
+                CONFIG.DATA_LOGGER.error("StockUpdaterDaily -> sync_asset() -> 3")
+                CONFIG.DATA_LOGGER.error(repr(asset))
+                CONFIG.DATA_LOGGER.error(date)
+                return [False, 0]
+            if datestamp is None:
+                # Log the details of the error if we fail to parse the date
+                CONFIG.DATA_LOGGER.error("StockUpdaterDaily -> sync_asset() -> 4")
+                CONFIG.DATA_LOGGER.error(repr(asset))
+                CONFIG.DATA_LOGGER.error(date)
+                # Terminate syncing this asset
+                return [False, 0]
+            # Don't sync daily data for the current date (candle incomplete)
+            if datestamp.date() == datetime.datetime.utcnow().date():
+                continue
+            # If we find a candle stamped prior to our most recently updated one,
+            # then we know we can terminate parsing the response here
+            if latest_candle is not None and datestamp <= latest_candle.get_open_time():
+                break
+            try:
+                # Try and parse all the elements to create the candle object
+                candle = Candle(asset=asset, open=float(candle_data['1. open']), high=float(candle_data['2. high']), low=float(candle_data['3. low']), close=float(candle_data['4. close']), volume=float(candle_data['5.volume']), open_time=datestamp, interval=self.interval)
+            except Exception as ex:
+                # If we fail, log all the details of the error
+                CONFIG.DATA_LOGGER.error("StockUpdaterDaily -> sync_asset() -> 5")
+                CONFIG.DATA_LOGGER.error(repr(asset))
+                CONFIG.DATA_LOGGER.exception(str(ex))
+                # Terminate syncing this asset
+                return [False, 0]
+            # If we have already parsed a candle already from the response
             if candles:
-                Candle.objects.insert(candles)
-            print('[DataLink] Finished downloading data for ' + stock.name + " (" + stock.ticker + ")")
-        else:
-            print('[DataLink] No update required on data for ' + stock.name + " (" + stock.ticker + ")")
+                # Then grab the date of the candle
+                target_day = candles[-1].get_open_time().date()
+            else:
+                # Otherwise grab the current date
+                target_day = datetime.datetime.utcnow().date()
+            # Calculate the potential 'filler' candle - i.e. if we have a weekend or closed trading day
+            filler_candle_stamp = candle.get_open_time() + datetime.timedelta(days=1)
+            # Loop over the days between the candle date and the target date
+            while (filler_candle_stamp.date() != target_day):
+                # Add the filler candles with closes set to the earliest candle
+                candles.append(Candle(asset=asset, close=candle.get_close(), open_time=filler_candle_stamp, interval=self.interval))
+                filler_candle_stamp = filler_candle_stamp + datetime.timedelta(days=1)
+            # Finally append the original candle (to maintain the insertion order)
+            candles.append(candle)
+        if candles:
+            # if we have candles to insert, then insert them all now
+            Candle.objects.insert(candles)
 
-    def on_daily(self):
-        p = mp.Pool(local_config.WORKER_THREADS)
-        p.map(self.grab_daily_history, Stock.objects)
-        p.close()
-        p.join()
-        #self.create_filler_candles()
+class StockUpdaterLive(IntervalUpdater):
+    def __init__(self, api, provider):
+        self.api = api
+        self.interval = Interval.Minute
+        self.last_update = None
+        self.name = "Live"
+        self.provider = provider
 
-    def on_interval(self):
-        print('[DataLink] Updating live stock prices...')
-        start_index = 0
+    def do_update(self):
+        index = 0
         array = []
-        while start_index < len(self.query_values):
-            array.append(start_index)
-            start_index += self.max_bulk_query
-        p = mp.Pool(local_config.WORKER_THREADS)
-        p.map(self.grab_price, array)
-        p.close()
-        p.join()
-        print('[DataLink] Update complete!')
+        while index < len(Stock.objects):
+            max_index = min(len(Stock.objects), index+MAX_BULK_QUERY)
+            array.append(o.get_ticker() for o in Stock.objects[index:max_index])
+            index += MAX_BULK_QUERY
+        pool = mp.Pool(CONFIG.WORKER_THREADS)
+        pool.map(self.sync_asset, array)
+        pool.close()
+        pool.join()
 
-    def on_startup(self):
-        if len(Stock.objects) == 0:
-            with open("datafeed/defaults/supported_stocks.csv") as csv_file:
-                result = csv.reader(csv_file, delimiter=",")
-                counter = 0
-                for row in result:
-                    if local_config.LIMIT_ASSETS == False or counter == 0:
-                        stock = Stock(ticker=row[0], name=row[1])
-                        stock.save()
-                    counter += 1
-                    if counter == 50:
-                        counter = 0
-        for stock in Stock.objects:
-            self.query_values.append(stock.ticker)
-        pass
+    def sync_asset(self, tickers):
+        counter = 0
+        while (counter < CONFIG.MAX_RETRIES):
+            try:
+                self.provider.make_request()
+                data = self.api.get_batch_stock_quotes(symbols=tickers)[0]
+            except Exception as ex:
+                CONFIG.DATA_LOGGER.error("StockUpdaterLive -> sync_asset() -> 1")
+                CONFIG.DATA_LOGGER.error(repr(tickers))
+                CONFIG.DATA_LOGGER.exception(str(ex))
+                sleep(CONFIG.ERROR_WAIT_TIME)
+                counter += 1
+                continue
+        if data is None:
+            return [False, 0]
+        for stock in data:
+            asset = Stock.objects(ticker=stock['1. symbol'])
+            if asset == None:
+                CONFIG.DATA_LOGGER.error("StockUpdaterLive -> sync_asset() -> 2")
+                CONFIG.DATA_LOGGER.error(repr(stock))
+                return [False, 0]
+            try:
+                datestamp = dateutil.parser.parse(stock['4. timestamp'])
+                datestamp = datestamp.replace(tzinfo=tz.gettz("US/Eastern"))
+                datestamp = datestamp.astimezone(UTC).replace(tzinfo=None)
+            except Exception as ex:
+                CONFIG.DATA_LOGGER.error("StockUpdaterLive -> sync_asset() -> 3")
+                CONFIG.DATA_LOGGER.error(repr(stock))
+                CONFIG.DATA_LOGGER.exception(str(ex))
+                return [False, 0]
+            if datestamp is None:
+                CONFIG.DATA_LOGGER.error("StockUpdaterLive -> sync_asset() -> 4")
+                CONFIG.DATA_LOGGER.error(repr(stock))
+                CONFIG.DATA_LOGGER.error(data[0]['6. Last Refreshed'])
+                return [False, 0]
+            try:
+                asset.set_price(float(stock['2. price']))
+            except Exception as ex:
+                CONFIG.DATA_LOGGER.error("StockUpdaterLive -> sync_asset() -> 5")
+                CONFIG.DATA_LOGGER.error(repr(asset))
+                CONFIG.DATA_LOGGER.exception(str(ex))
+                return [False, 0]
+            asset.set_price_timestamp(datestamp)
+            asset.save()
+        return [True, len(data)]
