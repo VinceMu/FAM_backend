@@ -11,7 +11,7 @@ api = Namespace('auth', description='authentication endpoint')
 @jwt.token_in_blacklist_loader
 def check_if_token_in_blacklist(decrypted_token):
     jti = decrypted_token['jti']
-    return (AuthRevokedToken.objects(jti=jti).first() is not None)
+    return AuthRevokedToken.has_token(jti)
 
 login_parser = api.parser()
 login_parser.add_argument('email', type=str, required=True, help='The users email', location='json')
