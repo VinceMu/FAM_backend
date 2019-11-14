@@ -170,7 +170,7 @@ class UploadUser(Resource):
         user.save()
         return make_response("Success", 200)
     
-@api.route('user/portfolio/stats')
+@api.route('/portfolio/stats')
 class AssetStats(Resource):
     def get(self):
         return("portfolio stats - provide a % change over 1day, 1wk, 1 mnth, 3mth, 6mth, 1y, etc")
