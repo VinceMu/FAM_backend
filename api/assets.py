@@ -90,4 +90,4 @@ class ReadAssets(Resource):
 @api.route('assets/performance/stats')
 class AssetStats(Resource):
     def get(self):
-        return("assets stats")
+        return("assets stats - provide a % change over 1day, 1wk, 1 mnth, 3mth, 6mth, 1y, etc")
