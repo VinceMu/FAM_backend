@@ -172,5 +172,32 @@ class UploadUser(Resource):
     
 @api.route('/portfolio/stats')
 class AssetStats(Resource):
+    @jwt_required
     def get(self):
-        return("portfolio stats - provide a % change over 1day, 1wk, 1 mnth, 3mth, 6mth, 1y, etc")
+        #current portfolio
+        """
+        user = User.objects(email=get_jwt_identity()).first()
+        if user == None:
+            return abort(401, "forbidden")
+        value = 0
+        spent_value = 0
+        for transaction in user.assets:
+            date_purchased = transaction.date_purchased.date()
+            start_candle = transaction.asset.get_daily_candle(86400, date_purchased)
+            spent_value -= (transaction.quantity * start_candle.close)
+            if transaction.date_sold != None:
+                date_sold = transaction.date_sold.date()
+                end_candle = transaction.asset.get_daily_candle(86400, date_sold)
+                spent_value += (transaction.quantity * end_candle.close)
+            else:
+                value += (transaction.asset.price * transaction.quantity)
+        current_portfolio = {
+            "purchase_value": spent_value,
+            "net_value": value + spent_value,
+            "value": value
+        }
+        calculations on current_portfolio to get change 
+        over 1 day, 1 wk, 1 mnth, 3 mth, 6 mth, 1y, etc?
+        """
+        return("portfolio stats - provide a % change over 1 day, 1 wk, 1 mnth, 3 mth, 6 mth, 1y, etc")
+    
