@@ -86,3 +86,8 @@ class ReadAssets(Resource):
         for asset in Asset.objects:
             results.append(asset.serialize())
         return make_response(jsonify(results), 201)
+    
+@api.route('assets/performance/stats')
+class AssetStats(Resource):
+    def get(self):
+        return("assets stats")
