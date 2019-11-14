@@ -169,3 +169,8 @@ class UploadUser(Resource):
         user.picture.replace(args['profile_picture'])
         user.save()
         return make_response("Success", 200)
+    
+@api.route('user/portfolio/stats')
+class AssetStats(Resource):
+    def get(self):
+        return("portfolio stats")
