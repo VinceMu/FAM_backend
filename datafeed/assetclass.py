@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from models import Asset, Candle, Currency, Interval, Stock
+from models import *
 from datafeed.provider import *
 from alpha_vantage.foreignexchange import ForeignExchange
 from alpha_vantage.timeseries import TimeSeries
@@ -19,6 +19,7 @@ DAILY_UPDATE_INTERVAL = 2
 MAX_BULK_QUERY = 100
 
 class AssetClass(ABC):
+    @abstractmethod
     def __init__(self, provider):
         self.provider = provider
         self.updaters = []
@@ -29,14 +30,12 @@ class AssetClass(ABC):
         pass
 
     # Returns the name of the data provider for this asset class
-    @abstractmethod
     def get_provider(self):
         if self.provider == None:
             return None
         return self.provider.get_name()
 
     # Method called at a select interval to update data for the asset class
-    @abstractmethod
     def on_interval(self):
         for updater in self.updaters:
             if updater.requires_update():
@@ -50,7 +49,7 @@ class AssetClass(ABC):
 class IntervalUpdater(ABC):
     def __init__(self, api, provider):
         self.api = api
-        self.interval = Interval.Day
+        self.interval = INTERVAL_DAY
         self.last_update = None
         self.provider = provider
 
@@ -60,7 +59,6 @@ class IntervalUpdater(ABC):
         pass
 
     # Returns whether this interval requires updating at the given time
-    @abstractmethod
     def requires_update(self):
         if self.last_update is None:
             return True
@@ -78,11 +76,12 @@ class CurrencyClass(AssetClass):
         return "Currency"
 
     def on_startup(self):
+        CONFIG.DATA_LOGGER.info("CurrencyClass -> on_startup() -> start")
         full_load = (len(Currency.objects) == 0)
         currencies = []
         try:
             with open("datafeed/defaults/supported_currencies.csv") as csv_file:
-                result = csv.reader(csv_file,delimiter=',')
+                result = csv.reader(csv_file, delimiter=',')
                 for row in result:
                     if not full_load:
                         search = Currency.objects(ticker=row[0], name=row[1]).first()
@@ -96,22 +95,26 @@ class CurrencyClass(AssetClass):
             Currency.objects.insert(currencies)
         self.updaters.append(CurrencyUpdaterLive(self.api, self.provider))
         self.updaters.append(CurrencyUpdaterDaily(self.api, self.provider))
+        CONFIG.DATA_LOGGER.info("CurrencyClass -> on_startup() -> finish")
 
 class CurrencyUpdaterDaily(IntervalUpdater):
     def __init__(self, api, provider):
         self.api = api
-        self.interval = Interval.Hour
+        self.interval = INTERVAL_HOUR
         self.last_update = None
         self.name = "Daily"
         self.provider = provider
 
     def do_update(self):
+        CONFIG.DATA_LOGGER.info("CurrencyUpdaterDaily -> do_update() -> start")
         pool = mp.Pool(CONFIG.WORKER_THREADS)
         pool.map(self.sync_asset, Currency.objects)
         pool.close()
         pool.join()
+        CONFIG.DATA_LOGGER.info("CurrencyUpdaterDaily -> do_update() -> finish")
 
     def sync_asset(self, asset: Asset):
+        CONFIG.DATA_LOGGER.info("CurrencyUpdaterDaily -> sync_asset(" + asset.get_name() + ") -> start")
         # Get the last updated candle
         latest_candle = asset.get_last_candle()
         # By default we won't update
@@ -120,6 +123,7 @@ class CurrencyUpdaterDaily(IntervalUpdater):
             curr_time = datetime.datetime.utcnow()
             # Calculate how many days ago the last full synced candle was
             diff = (curr_time-latest_candle.get_open_time()).total_seconds()/self.interval
+            CONFIG.DATA_LOGGER.debug("CurrencyUpdaterDaily -> sync_asset(" + asset.get_name() + ") -> diff is " + str(diff))
             # Only update if it is greater than the update interval (2 days - as it is open)
             if diff > DAILY_UPDATE_INTERVAL:
                 # Compact sync will only return last 100 candles, so to reduce network usage
@@ -133,6 +137,7 @@ class CurrencyUpdaterDaily(IntervalUpdater):
             sync_type = DAILY_SYNC_FULL
         # Return success in syncing 0 results
         if sync_type is None:
+            CONFIG.DATA_LOGGER.info("CurrencyUpdaterDaily -> sync_asset(" + asset.get_name() + ") -> finish(nosync)")
             return [True, 0]
         counter = 0
         # Ensure we haven't attempted to sync too many times with failing
@@ -141,11 +146,11 @@ class CurrencyUpdaterDaily(IntervalUpdater):
                 # Notify the provider we intend on making the request - ensure we are under quotas
                 self.provider.make_request()
                 # Make the request with the given ticker
-                data = self.api.get_currency_exchange_daily(asset.get_ticker())
+                data = self.api.get_currency_exchange_daily(asset.get_ticker(), "USD", outputsize=sync_type)
             except Exception as ex:
                 # Log the details of the error if we fail
                 CONFIG.DATA_LOGGER.error("CurrencyUpdaterDaily -> sync_asset() -> 1")
-                CONFIG.DATA_LOGGER.error(repr(asset))
+                CONFIG.DATA_LOGGER.error(str(asset.as_dict()))
                 CONFIG.DATA_LOGGER.exception(str(ex))
                 # Wait for specified time by configuration
                 sleep(CONFIG.ERROR_WAIT_TIME)
@@ -164,7 +169,7 @@ class CurrencyUpdaterDaily(IntervalUpdater):
             if candle_data is None:
                 # Log the details of the error if we get a None response here
                 CONFIG.DATA_LOGGER.error("CurrencyUpdaterDaily -> sync_asset() -> 2")
-                CONFIG.DATA_LOGGER.error(repr(asset))
+                CONFIG.DATA_LOGGER.error(str(asset.as_dict()))
                 CONFIG.DATA_LOGGER.error(date)
                 # Terminate syncing this asset
                 return [False, 0]
@@ -172,13 +177,13 @@ class CurrencyUpdaterDaily(IntervalUpdater):
                 datestamp = dateutil.parser.parse(date)
             except Exception as ex:
                 CONFIG.DATA_LOGGER.error("CurrencyUpdaterDaily -> sync_asset() -> 3")
-                CONFIG.DATA_LOGGER.error(repr(asset))
+                CONFIG.DATA_LOGGER.error(str(asset.as_dict()))
                 CONFIG.DATA_LOGGER.error(date)
                 return [False, 0]
             if datestamp is None:
                 # Log the details of the error if we fail to parse the date
                 CONFIG.DATA_LOGGER.error("CurrencyUpdaterDaily -> sync_asset() -> 4")
-                CONFIG.DATA_LOGGER.error(repr(asset))
+                CONFIG.DATA_LOGGER.error(str(asset.as_dict()))
                 CONFIG.DATA_LOGGER.error(date)
                 # Terminate syncing this asset
                 return [False, 0]
@@ -191,11 +196,11 @@ class CurrencyUpdaterDaily(IntervalUpdater):
                 break
             try:
                 # Try and parse all the elements to create the candle object
-                candle = Candle(asset=asset, open=float(candle_data['1. open']), high=float(candle_data['2. high']), low=float(candle_data['3. low']), close=float(candle_data['4. close']), open_time=datestamp, interval=self.interval)
+                candle = Candle(asset=asset, open=float(candle_data['1. open']), high=float(candle_data['2. high']), low=float(candle_data['3. low']), close=float(candle_data['4. close']), open_time=datestamp, interval=INTERVAL_DAY)
             except Exception as ex:
                 # If we fail, log all the details of the error
                 CONFIG.DATA_LOGGER.error("CurrencyUpdaterDaily -> sync_asset() -> 5")
-                CONFIG.DATA_LOGGER.error(repr(asset))
+                CONFIG.DATA_LOGGER.error(str(asset.as_dict()))
                 CONFIG.DATA_LOGGER.exception(str(ex))
                 # Terminate syncing this asset
                 return [False, 0]
@@ -215,25 +220,29 @@ class CurrencyUpdaterDaily(IntervalUpdater):
                 filler_candle_stamp = filler_candle_stamp + datetime.timedelta(days=1)
             # Finally append the original candle (to maintain the insertion order)
             candles.append(candle)
+        CONFIG.DATA_LOGGER.info("CurrencyUpdaterDaily -> sync_asset(" + asset.get_name() + ") -> finish(sync)")
         if candles:
             # if we have candles to insert, then insert them all now
             Candle.objects.insert(candles)
 
-class CurrencyUpdaterLive:
+class CurrencyUpdaterLive(IntervalUpdater):
     def __init__(self, api, provider):
         self.api = api
-        self.interval = Interval.Minute
+        self.interval = INTERVAL_MINUTE
         self.last_update = None
         self.name = "Live"
         self.provider = provider
 
     def do_update(self):
+        CONFIG.DATA_LOGGER.info("CurrencyUpdaterLive -> do_update() -> start")
         pool = mp.Pool(CONFIG.WORKER_THREADS)
         pool.map(self.sync_asset, Currency.objects)
         pool.close()
         pool.join()
+        CONFIG.DATA_LOGGER.info("CurrencyUpdaterLive -> do_update() -> finish")
 
     def sync_asset(self, asset: Asset):
+        CONFIG.DATA_LOGGER.info("CurrencyUpdaterLive -> sync_asset(" + asset.get_name() + ") -> start")
         counter = 0
         while (counter < CONFIG.MAX_RETRIES):
             try:
@@ -241,11 +250,12 @@ class CurrencyUpdaterLive:
                 data = self.api.get_currency_exchange_rate(asset.get_ticker(), "USD")
             except Exception as ex:
                 CONFIG.DATA_LOGGER.error("CurrencyUpdaterLive -> sync_asset() -> 1")
-                CONFIG.DATA_LOGGER.error(repr(asset))
+                CONFIG.DATA_LOGGER.error(str(asset.as_dict()))
                 CONFIG.DATA_LOGGER.exception(str(ex))
                 sleep(CONFIG.ERROR_WAIT_TIME)
                 counter += 1
                 continue
+            break
         if data is None:
             return [False, 0]
         try:
@@ -253,23 +263,24 @@ class CurrencyUpdaterLive:
             datestamp = datestamp.replace(tzinfo=UTC)
         except Exception as ex:
             CONFIG.DATA_LOGGER.error("CurrencyUpdaterLive -> sync_asset() -> 2")
-            CONFIG.DATA_LOGGER.error(repr(asset))
+            CONFIG.DATA_LOGGER.error(str(asset.as_dict()))
             CONFIG.DATA_LOGGER.exception(str(ex))
             return [False, 0]
         if datestamp is None:
             CONFIG.DATA_LOGGER.error("CurrencyUpdaterLive -> sync_asset() -> 3")
-            CONFIG.DATA_LOGGER.error(repr(asset))
+            CONFIG.DATA_LOGGER.error(str(asset.as_dict()))
             CONFIG.DATA_LOGGER.error(data[0]['6. Last Refreshed'])
             return [False, 0]
         try:
-            asset.set_price(data[0]['5. Exchange Rate'])
+            asset.set_price(float(data[0]['5. Exchange Rate']))
         except Exception as ex:
             CONFIG.DATA_LOGGER.error("CurrencyUpdaterLive -> sync_asset() -> 4")
-            CONFIG.DATA_LOGGER.error(repr(asset))
+            CONFIG.DATA_LOGGER.error(str(asset.as_dict()))
             CONFIG.DATA_LOGGER.exception(str(ex))
             return [False, 0]
         asset.set_price_timestamp(datestamp)
         asset.save()
+        CONFIG.DATA_LOGGER.info("CurrencyUpdaterLive -> sync_asset(" + asset.get_name() + ") -> finish")
 
 class StockClass(AssetClass):
 
@@ -282,15 +293,16 @@ class StockClass(AssetClass):
         return "Stocks"
 
     def on_startup(self):
+        CONFIG.DATA_LOGGER.info("StocksClass -> on_startup() -> start")
         full_load = (len(Stock.objects) == 0)
         stocks = []
         try:
             with open("datafeed/defaults/supported_stocks.csv") as csv_file:
-                result = csv.reader(csv_file,delimiter=',')
+                result = csv.reader(csv_file, delimiter=',')
                 for row in result:
                     if not full_load:
                         search = Stock.objects(ticker=row[0], name=row[1]).first()
-                    if full_load or search == None:
+                    if full_load or search is None:
                         stock = Stock(ticker=row[0], name=row[1])
                         stocks.append(stock)
                     if CONFIG.LIMIT_ASSETS and len(stocks) > CONFIG.LIMIT_ASSETS_QUANTITY:
@@ -301,22 +313,26 @@ class StockClass(AssetClass):
         Stock.objects.insert(stocks)
         self.updaters.append(StockUpdaterLive(self.api, self.provider))
         self.updaters.append(StockUpdaterDaily(self.api, self.provider))
+        CONFIG.DATA_LOGGER.info("StocksClass -> on_startup() -> finish")
 
 class StockUpdaterDaily(IntervalUpdater):
     def __init__(self, api, provider):
         self.api = api
-        self.interval = Interval.Hour
+        self.interval = INTERVAL_HOUR
         self.last_update = None
         self.name = "Daily"
         self.provider = provider
 
     def do_update(self):
+        CONFIG.DATA_LOGGER.info("StockUpdaterDaily -> do_update() -> start")
         pool = mp.Pool(CONFIG.WORKER_THREADS)
         pool.map(self.sync_asset, Stock.objects)
         pool.close()
         pool.join()
+        CONFIG.DATA_LOGGER.info("StockUpdaterDaily -> do_update() -> finish")
 
     def sync_asset(self, asset: Asset):
+        CONFIG.DATA_LOGGER.info("StockUpdaterDaily -> sync_asset(" + asset.get_name() + ") -> start")
         # Get the last updated candle
         latest_candle = asset.get_last_candle()
         # By default we won't update
@@ -338,6 +354,7 @@ class StockUpdaterDaily(IntervalUpdater):
             sync_type = DAILY_SYNC_FULL
         # Return success in syncing 0 results
         if sync_type is None:
+            CONFIG.DATA_LOGGER.info("StockUpdaterDaily -> sync_asset(" + asset.get_name() + ") -> finish(nosync)")
             return [True, 0]
         counter = 0
         # Ensure we haven't attempted to sync too many times with failing
@@ -350,7 +367,7 @@ class StockUpdaterDaily(IntervalUpdater):
             except Exception as ex:
                 # Log the details of the error if we fail
                 CONFIG.DATA_LOGGER.error("StockUpdaterDaily -> sync_asset() -> 1")
-                CONFIG.DATA_LOGGER.error(repr(asset))
+                CONFIG.DATA_LOGGER.error(str(asset.as_dict()))
                 CONFIG.DATA_LOGGER.exception(str(ex))
                 # Wait for specified time by configuration
                 sleep(CONFIG.ERROR_WAIT_TIME)
@@ -369,7 +386,7 @@ class StockUpdaterDaily(IntervalUpdater):
             if candle_data is None:
                 # Log the details of the error if we get a None response here
                 CONFIG.DATA_LOGGER.error("StockUpdaterDaily -> sync_asset() -> 2")
-                CONFIG.DATA_LOGGER.error(repr(asset))
+                CONFIG.DATA_LOGGER.error(str(asset.as_dict()))
                 CONFIG.DATA_LOGGER.error(date)
                 # Terminate syncing this asset
                 return [False, 0]
@@ -379,13 +396,13 @@ class StockUpdaterDaily(IntervalUpdater):
                 datestamp = datestamp.astimezone(UTC).replace(tzinfo=None)
             except Exception as ex:
                 CONFIG.DATA_LOGGER.error("StockUpdaterDaily -> sync_asset() -> 3")
-                CONFIG.DATA_LOGGER.error(repr(asset))
+                CONFIG.DATA_LOGGER.error(str(asset.as_dict()))
                 CONFIG.DATA_LOGGER.error(date)
                 return [False, 0]
             if datestamp is None:
                 # Log the details of the error if we fail to parse the date
                 CONFIG.DATA_LOGGER.error("StockUpdaterDaily -> sync_asset() -> 4")
-                CONFIG.DATA_LOGGER.error(repr(asset))
+                CONFIG.DATA_LOGGER.error(str(asset.as_dict()))
                 CONFIG.DATA_LOGGER.error(date)
                 # Terminate syncing this asset
                 return [False, 0]
@@ -398,11 +415,11 @@ class StockUpdaterDaily(IntervalUpdater):
                 break
             try:
                 # Try and parse all the elements to create the candle object
-                candle = Candle(asset=asset, open=float(candle_data['1. open']), high=float(candle_data['2. high']), low=float(candle_data['3. low']), close=float(candle_data['4. close']), volume=float(candle_data['5.volume']), open_time=datestamp, interval=self.interval)
+                candle = Candle(asset=asset, open=float(candle_data['1. open']), high=float(candle_data['2. high']), low=float(candle_data['3. low']), close=float(candle_data['4. close']), volume=float(candle_data['5.volume']), open_time=datestamp, interval=INTERVAL_DAY)
             except Exception as ex:
                 # If we fail, log all the details of the error
                 CONFIG.DATA_LOGGER.error("StockUpdaterDaily -> sync_asset() -> 5")
-                CONFIG.DATA_LOGGER.error(repr(asset))
+                CONFIG.DATA_LOGGER.error(str(asset.as_dict()))
                 CONFIG.DATA_LOGGER.exception(str(ex))
                 # Terminate syncing this asset
                 return [False, 0]
@@ -425,16 +442,18 @@ class StockUpdaterDaily(IntervalUpdater):
         if candles:
             # if we have candles to insert, then insert them all now
             Candle.objects.insert(candles)
+        CONFIG.DATA_LOGGER.info("StockUpdaterDaily -> sync_asset(" + asset.get_name() + ") -> finish(sync)")
 
 class StockUpdaterLive(IntervalUpdater):
     def __init__(self, api, provider):
         self.api = api
-        self.interval = Interval.Minute
+        self.interval = INTERVAL_MINUTE
         self.last_update = None
         self.name = "Live"
         self.provider = provider
 
     def do_update(self):
+        CONFIG.DATA_LOGGER.info("StockUpdaterLive -> do_update() -> start")
         index = 0
         array = []
         while index < len(Stock.objects):
@@ -445,8 +464,10 @@ class StockUpdaterLive(IntervalUpdater):
         pool.map(self.sync_asset, array)
         pool.close()
         pool.join()
+        CONFIG.DATA_LOGGER.info("StockUpdaterLive -> do_update() -> finish")
 
     def sync_asset(self, tickers):
+        CONFIG.DATA_LOGGER.info("StockUpdaterLive -> sync_asset(" + str(len(tickers)) + " stocks) -> start")
         counter = 0
         while (counter < CONFIG.MAX_RETRIES):
             try:
@@ -459,11 +480,12 @@ class StockUpdaterLive(IntervalUpdater):
                 sleep(CONFIG.ERROR_WAIT_TIME)
                 counter += 1
                 continue
+            break
         if data is None:
             return [False, 0]
         for stock in data:
             asset = Stock.objects(ticker=stock['1. symbol'])
-            if asset == None:
+            if asset is None:
                 CONFIG.DATA_LOGGER.error("StockUpdaterLive -> sync_asset() -> 2")
                 CONFIG.DATA_LOGGER.error(repr(stock))
                 return [False, 0]
@@ -473,21 +495,23 @@ class StockUpdaterLive(IntervalUpdater):
                 datestamp = datestamp.astimezone(UTC).replace(tzinfo=None)
             except Exception as ex:
                 CONFIG.DATA_LOGGER.error("StockUpdaterLive -> sync_asset() -> 3")
-                CONFIG.DATA_LOGGER.error(repr(stock))
+                CONFIG.DATA_LOGGER.error(stock['4. timestamp'])
+                CONFIG.DATA_LOGGER.error(str(asset.as_dict()))
                 CONFIG.DATA_LOGGER.exception(str(ex))
                 return [False, 0]
             if datestamp is None:
                 CONFIG.DATA_LOGGER.error("StockUpdaterLive -> sync_asset() -> 4")
-                CONFIG.DATA_LOGGER.error(repr(stock))
+                CONFIG.DATA_LOGGER.error(str(asset.as_dict()))
                 CONFIG.DATA_LOGGER.error(data[0]['6. Last Refreshed'])
                 return [False, 0]
             try:
                 asset.set_price(float(stock['2. price']))
             except Exception as ex:
                 CONFIG.DATA_LOGGER.error("StockUpdaterLive -> sync_asset() -> 5")
-                CONFIG.DATA_LOGGER.error(repr(asset))
+                CONFIG.DATA_LOGGER.error(str(asset.as_dict()))
                 CONFIG.DATA_LOGGER.exception(str(ex))
                 return [False, 0]
             asset.set_price_timestamp(datestamp)
             asset.save()
+        CONFIG.DATA_LOGGER.info("StockUpdaterLive -> sync_asset(" + str(len(tickers)) + " stocks) -> start")
         return [True, len(data)]

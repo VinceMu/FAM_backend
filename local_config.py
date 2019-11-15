@@ -12,6 +12,10 @@ ERROR_WAIT_TIME = 10
 MAX_RETRIES = 5
 LIMIT_ASSETS = True
 LIMIT_ASSETS_QUANTITY = 10
+logging.basicConfig()
 DATA_LOGGER = logging.getLogger("DataLink")
+DATA_LOGGER.setLevel(logging.DEBUG)
+MODEL_LOGGER = logging.getLogger("MODEL")
+MODEL_LOGGER.setLevel(logging.DEBUG)
 REST_LOGGER = logging.getLogger("REST")
 os.environ['ALPHAVANTAGE_API_KEY'] = "[insert key here]"

@@ -18,21 +18,23 @@ class DataLink:
         if os.environ['ALPHAVANTAGE_API_KEY'] == "[insert key here]":
             CONFIG.DATA_LOGGER.error("No connection established as API key missing")
             return
+        print("[DataLink] Loading asset classes")
         self.load_asset_classes()
         for asset_class in self.asset_classes:
             asset_class.on_startup()
+        print("[DataLink] ===> Done")
         while self.is_running:
             update_start = datetime.datetime.now()
-            CONFIG.DATA_LOGGER.info("Started update check at " + str(update_start))
+            print("[DataLink] Started update check at " + str(update_start))
             for asset_class in self.asset_classes:
                 asset_class.on_interval()
             update_end = datetime.datetime.now()
             diff = round((update_end-update_start).total_seconds()/60)
-            CONFIG.DATA_LOGGER.info("Finished update at " + str(update_end) + " taking " + str(diff) + " minutes")
+            print("[DataLink] Finished update at " + str(update_end) + " taking " + str(diff) + " minutes")
             time.sleep(CONFIG.REFRESH_INTERVAL)
 
 connect('FAM', host=CONFIG.MONGODB + "/" + CONFIG.DB)
 LINK = DataLink()
 LINK.run()
-CONFIG.DATA_LOGGER.info("Program has terminated")
+print("[DataLink] Shutting down...")
 

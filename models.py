@@ -2,13 +2,13 @@ import datetime
 import enum
 from mongoengine import Document, StringField, FloatField, DateTimeField, LazyReferenceField, ListField, ReferenceField, FileField, IntField, Q
 from flask import make_response
+from local_config import MODEL_LOGGER
 
-class Interval(enum.Enum):
-    Second = 1,
-    Minute = Second*60,
-    Hour = Minute*60,
-    Day = Hour*24,
-    Week = Day*7
+INTERVAL_SECOND = int(1)
+INTERVAL_MINUTE = int(INTERVAL_SECOND*60)
+INTERVAL_HOUR = int(INTERVAL_MINUTE*60)
+INTERVAL_DAY = int(INTERVAL_HOUR*24)
+INTERVAL_WEEK = int(INTERVAL_DAY*7)
 
 class Asset(Document):
     ticker = StringField(required=True)
@@ -16,6 +16,7 @@ class Asset(Document):
     price = FloatField()
     timestamp = DateTimeField()
     meta = {'allow_inheritance': True}
+    test = False
 
     def as_dict(self):
         """Returns the details of the Asset object represented as a dictionary.
@@ -46,22 +47,22 @@ class Asset(Document):
             return None
         return round(((self.get_price()-candle.get_close())/candle.get_close())*100, 2)
 
-    def get_candles(self, interval=Interval.Day):
+    def get_candles(self, interval=INTERVAL_DAY):
         """Returns the candles for the asset on the given Candle interval.
         
         Keyword Arguments:
-            interval {integer} -- The number of seconds each Candle represents. (default: {Interval.Day})
+            interval {integer} -- The number of seconds each Candle represents. (default: {INTERVAL_DAY})
         
         Returns:
             QuerySet -- An iterable QuerySet containing Candles in the collection which match the query.
         """
         return Candle.get_asset(self, interval)
 
-    def get_candles_within(self, interval=Interval.Day, start=datetime.datetime.min, finish=datetime.datetime.max):
+    def get_candles_within(self, interval=INTERVAL_DAY, start=datetime.datetime.min, finish=datetime.datetime.max):
         """Returns the candles for the asset on the given Candle interval within the timeframe specified.
         
         Keyword Arguments:
-            interval {integer} -- The number of seconds each Candle represents. (default: {Interval.Day})
+            interval {integer} -- The number of seconds each Candle represents. (default: {INTERVAL_DAY})
             start {datetime} -- The starting datetime of the interval. (default: {datetime.datetime.min})
             finish {datetime} -- The finishing datetime of the interval. (default: {datetime.datetime.max})
         
@@ -71,7 +72,7 @@ class Asset(Document):
         return Candle.get_asset_within(self, interval, start, finish)
 
     def get_daily_candle(self, date):
-        """Returns the Interval.Day candle for the given date.
+        """Returns the INTERVAL_DAY candle for the given date.
         
         Arguments:
             date {datetime/date} -- The datetime (date extracted) or date for which the Candle is required.
@@ -82,7 +83,7 @@ class Asset(Document):
         if isinstance(date, datetime.datetime):
             date = date.date()
         next_date = date+datetime.timedelta(days=1)
-        return Candle.get_asset_within(self, Interval.Day, date, next_date, False, True)
+        return Candle.get_asset_within(self, INTERVAL_DAY, date, next_date, False, True)
 
     def get_daily_performance(self):
         """Calculates and returns the percentage change on the previous days' trade and the current
@@ -102,11 +103,11 @@ class Asset(Document):
             "previous": last_candle.get_performance_percent()
         }    
 
-    def get_first_candle(self, interval=Interval.Day):
+    def get_first_candle(self, interval=INTERVAL_DAY):
         """Returns the first candle for the asset on the given interval.
         
         Keyword Arguments:
-            interval {integer} -- The number of seconds each Candle represents. (default: {Interval.Day})
+            interval {integer} -- The number of seconds each Candle represents. (default: {INTERVAL_DAY})
         
         Returns:
             Candle -- A Candle object matching the query - None if cannot be found.
@@ -129,11 +130,11 @@ class Asset(Document):
         """
         return self.name
 
-    def get_last_candle(self, interval=Interval.Day, market_open=False):
+    def get_last_candle(self, interval=INTERVAL_DAY, market_open=False):
         """Returns the last candle for the asset on the given interval.
         
         Keyword Arguments:
-            interval {integer} -- The number of seconds each Candle represents. (default: {Interval.Day})
+            interval {integer} -- The number of seconds each Candle represents. (default: {INTERVAL_DAY})
             market_open {bool} -- Whether the market needs to be open on the provided candle - i.e. not filler candle. (default: {False})
         
         Returns:
@@ -169,7 +170,7 @@ class Asset(Document):
         """Returns whether the asset current price has been updated recently within an optional specified interval.
         
         Keyword Arguments:
-            interval {integer} -- The number of seconds to check for a recent update. (default: {Interval.Minute*10})
+            interval {integer} -- The number of seconds to check for a recent update. (default: {INTERVAL_MINUTE*10})
         
         Returns:
             bool -- True if an update has occurred within the interval; False otherwise.
@@ -269,12 +270,12 @@ class Candle(Document):
         }
 
     @staticmethod
-    def get_asset(asset, interval=Interval.Day):
+    def get_asset(asset, interval=INTERVAL_DAY):
         """Returns a list of candles given the asset and the interval.
         
         Arguments:
             asset {Asset} -- The Asset collection object.
-            interval {integer} -- The number of seconds each candle represents. (default: {Interval.Day})
+            interval {integer} -- The number of seconds each candle represents. (default: {INTERVAL_DAY})
         
         Returns:
             QuerySet -- An iterable QuerySet containing objects in the collection matching the query.
@@ -282,12 +283,12 @@ class Candle(Document):
         return Candle.objects(asset=asset, interval=interval)
 
     @staticmethod
-    def get_asset_within(asset, interval=Interval.Day, start=datetime.datetime.min, finish=datetime.datetime.max, exclude_start=False, exclude_finish=False):
+    def get_asset_within(asset, interval=INTERVAL_DAY, start=datetime.datetime.min, finish=datetime.datetime.max, exclude_start=False, exclude_finish=False):
         """Returns the candles for the given asset and interval within the specified timeframe.
         
         Arguments:
             asset {Asset} -- The Asset collection object.
-            interval {integer} -- The number of seconds each candle represents. (default: {Interval.Day})
+            interval {integer} -- The number of seconds each candle represents. (default: {INTERVAL_DAY})
             start {datetime} -- The starting datetime of the interval. (default: {datetime.datetime.min})
             finish {datetime} -- The finishing datetime of the interval. (default: {datetime.datetime.max})
             exclude_start {bool} -- Whether to exclude the start datetime from the interval. (default: {False})
@@ -309,12 +310,12 @@ class Candle(Document):
             return result_set.filter(Q(open_time__gte=start) & Q(open_time__lt=finish))
 
     @staticmethod
-    def get_asset_first_candle(asset, interval=Interval.Day):
+    def get_asset_first_candle(asset, interval=INTERVAL_DAY):
         """Returns the first candle (date-timewise) for the asset with the given interval.
         
         Arguments:
             asset {Asset} -- The Asset collection object.
-            interval {integer} -- The number of seconds each candle represents. (default: {Interval.Day})
+            interval {integer} -- The number of seconds each candle represents. (default: {INTERVAL_DAY})
         
         Returns:
             QuerySet -- An iterable QuerySet containing objects in the collection matching the query.
@@ -322,20 +323,22 @@ class Candle(Document):
         return Candle.objects(asset=asset, interval=interval).order_by('open_time').first()
 
     @staticmethod
-    def get_asset_last_candle(asset, interval=Interval.Day, market_open=False):
+    def get_asset_last_candle(asset, interval=INTERVAL_DAY, market_open=False):
         """Returns the last candle (date-timewise) for the asset with the given interval.
         
         Arguments:
             asset {Asset} -- The Asset collection object.
-            interval {integer} -- The number of seconds each candle represents. (default: {Interval.Day})
+            interval {integer} -- The number of seconds each candle represents. (default: {INTERVAL_DAY})
             market_open {bool} -- Whether the market needs to be open on the provided candle - i.e. not filler candle. (default: {False})
         
         Returns:
-            QuerySet -- An iterable QuerySet containing objects in the collection matching the query.
+            Candle -- The Candle object representing the most recent for the interval; None if doesn't exist.
         """
+        MODEL_LOGGER.info("Candle -> get_asset_last_candle(" + asset.get_name() + ", " + str(interval) + ", " + str(market_open) + ") -> call")
+        MODEL_LOGGER.info(str(type(interval)))
         if market_open:
             return Candle.objects(asset=asset, interval=interval, open__ne=None).first()
-        return Candle.objects(asset=asset, interval=interval).first()
+        return Candle.objects(asset=asset, interval=86400).first()
 
     def get_close(self):
         """Returns the closing price of the Candle.
