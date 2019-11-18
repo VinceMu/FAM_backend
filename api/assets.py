@@ -1,88 +1,118 @@
-from flask import make_response, jsonify
-from flask_restplus import Namespace, Resource, abort
+from dateutil import parser
+from flask import jsonify, make_response, Response
+from flask_restplus import abort, Namespace, Resource
 from flask_jwt_extended import jwt_required
-from models import Asset
-from bson import ObjectId
-import dateutil.parser
-import json
 
-api = Namespace('assets', description='assets endpoint')
+from models.asset import Asset
 
-AUTOCOMPLETE_PARSER = api.parser()
+API = Namespace('assets', description='assets endpoint')
+
+AUTOCOMPLETE_PARSER = API.parser()
 AUTOCOMPLETE_PARSER.add_argument('asset_name', type=str, required=True, help='The start of the name of the asset', location='args')
 
-@api.route('/autocomplete')
+@API.route('/autocomplete')
 class AutocompleteAsset(Resource):
-    @api.expect(AUTOCOMPLETE_PARSER)
-    def get(self):
+
+    @API.expect(AUTOCOMPLETE_PARSER)
+    def get(self) -> Response:
+        """Endpoint (public) provides the details of all assets containing the given asset_name.
+        
+        Returns:
+            Response -- The flask Response object.
+        """
         args = AUTOCOMPLETE_PARSER.parse_args()
-        assets = Asset.objects(name__istartswith=args['asset_name']).all().to_json()
-        return make_response(jsonify(assets), 201)
+        assets = Asset.autocomplete_by_name(args['asset_name'])
+        assets_dict = [asset.as_dict_autocomplete() for asset in assets]
+        return make_response(jsonify(assets_dict), 200)
 
-PERFORMANCE_DAILY_PARSER = api.parser()
-PERFORMANCE_DAILY_PARSER.add_argument('asset_id', type=str, required=True, help='The ID of the asset', location='args')
-
-def get_performance_fields(self, asset):
-    candle = asset.get_candles_interval_sorted(86400).first()
-    fields = {}
-    fields['last_daily'] = candle.serialize_price()
-    fields['curr_daily'] = asset.serialize_price()
-    fields['last_performance_percent'] = round((candle.close - candle.open)/candle.open*100,2)
-    fields['curr_performance_percent'] = round((asset.price - candle.close)/candle.close*100,2)
-    return fields
-
-HISTORICAL_DAILY_PARSER = api.parser()
+HISTORICAL_DAILY_PARSER = API.parser()
 HISTORICAL_DAILY_PARSER.add_argument('asset_id', type=str, required=True, help='The ID of the asset', location='args')
 HISTORICAL_DAILY_PARSER.add_argument('start_date', type=str, required=False, help='The start date of the request', location='args')
 HISTORICAL_DAILY_PARSER.add_argument('end_date', type=str, required=False, help='The end date of the request', location='args')
 
-@api.route('/historical/daily')
+@API.route("/historical/daily")
 class HistoricalDaily(Resource):
+
     @jwt_required
-    @api.expect(HISTORICAL_DAILY_PARSER)
-    def get(self):
+    @API.expect(HISTORICAL_DAILY_PARSER)
+    def get(self) -> Response:
+        """Endpoint (private) provides the historical candle data for a given asset.
+        
+        Returns:
+            Response -- The flask Response object.
+        """
         args = HISTORICAL_DAILY_PARSER.parse_args()
-        if ObjectId.is_valid(args['asset_id']) == False:
-            return abort(400, "invalid asset id")
-        asset = Asset.objects(id=args['asset_id']).first()
-        if asset == None:
-            return abort(400, "invalid asset")
-        if args['start_date'] == None:
+        asset = Asset.get_by_id(args['asset_id'])
+        if asset is None:
+            return abort(400, "Invalid {asset_id} given.")
+        if args['start_date'] is None:
             start_date = None
         else:
             try:
-                start_date = dateutil.parser.parse(args['start_date'])
-            except:
-                abort(400, "invalid start date")
-        if args['end_date'] == None:
+                start_date = parser.parse(args['start_date'])
+            except Exception:
+                abort(400, "Invalid {start_date} given.")
+        if args['end_date'] is None:
             end_date = None
         else:
             try:
-                end_date = dateutil.parser.parse(args['end_date'])
-            except:
-                abort(400, "invalid end date")
-        candles = asset.get_daily_candles(86400, start_date, end_date)
-        return make_response(jsonify([candle.as_dict() for candle in candles]), 200)
+                end_date = parser.parse(args['end_date'])
+            except Exception:
+                abort(400, "Invalid {end_date} given.")
+        candles = asset.get_candles_within(start=start_date, finish=end_date)
+        candles_dict = [candle.as_dict() for candle in candles]
+        return make_response(jsonify(candles_dict), 200)
 
-@api.route('/performance/daily')
+@API.route('/list')
+class ListAssets(Resource):
+    
+    def get(self) -> Response:
+        """Endpoint (public) provides a list of all the Assets and associated information.
+        
+        Returns:
+            Response -- The flask Response object.
+        """
+        assets = Asset.get()
+        assets_dict = [asset.as_dict() for asset in assets]
+        return make_response(jsonify(assets_dict), 200)
+
+PERFORMANCE_DAILY_PARSER = API.parser()
+PERFORMANCE_DAILY_PARSER.add_argument('asset_id', type=str, required=True, help='The ID of the asset', location='args')
+
+@API.route('/performance/daily')
 class PerformanceDaily(Resource):
-    @jwt_required
-    @api.expect(PERFORMANCE_DAILY_PARSER)
-    def get(self):
-        args = PERFORMANCE_DAILY_PARSER.parse_args()
-        if ObjectId.is_valid(args['asset_id']) == False:
-            return abort(400, "invalid asset id")
-        asset = Asset.objects(id=args['asset_id']).first()
-        if asset == None:
-            return abort(400, "invalid asset")
-        print(str(dateutil.parser.parse("22-09-2019")))
-        print(str(asset.get_daily_candle(86400, dateutil.parser.parse("22-09-2019"))))
-        return make_response(asset.serialize(), 200)
 
-@api.route('/read')
-class ReadAssets(Resource):
-    def get(self):
-        results = []
-        for asset in Asset.objects:
-            results.append(asset.serialize())
-        return make_response(jsonify(results), 201)
+    @jwt_required
+    @API.expect(PERFORMANCE_DAILY_PARSER)
+    def get(self) -> Response:
+        """Endpoint (private) provides the performance of a specified asset over the current and previous day.
+        
+        Returns:
+            Response -- The flask Response object.
+        """
+        args = PERFORMANCE_DAILY_PARSER.parse_args()
+        asset = Asset.get_by_id(args['asset_id'])
+        if asset is None:
+            return abort(400, "Invalid {asset_id} given.")
+        return make_response(jsonify(asset.get_daily_performance()), 200)
+
+READ_ASSET_PARSER = API.parser()
+READ_ASSET_PARSER.add_argument('asset_id', type=str, required=True, help='The ID of the asset', location='args')
+
+@API.route('/read')
+class ReadAsset(Resource):
+
+    @jwt_required
+    @API.expect(READ_ASSET_PARSER)
+    def get(self) -> Response:
+        """Endpoint (private) provides the data associated with an Asset.
+        
+        Returns:
+            Response -- The flask Response object.
+        """
+        args = READ_ASSET_PARSER.parse_args()
+        asset = Asset.get_by_id(args['asset_id'])
+        if asset is None:
+            return abort(400, "Invalid {asset_id} given.")
+        asset_dict = asset.as_dict()
+        return make_response(jsonify(asset_dict), 200)

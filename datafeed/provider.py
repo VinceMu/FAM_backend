@@ -4,20 +4,27 @@ from threading import Lock
 
 class Provider(ABC):
 
-    # Get the number of requests permitted per minute
     @abstractmethod
-    def get_limit(self):
-        pass
+    def get_limit(self) -> int:
+        """Returns the number of requests per minute permitted by the provider.
+        
+        Returns:
+            int -- The number of requests permitted.
+        """
 
-    # Get the name of the data provider
     @abstractmethod
-    def get_name(self):
-        pass
+    def get_name(self) -> str:
+        """Returns the name of the data provider.
+        
+        Returns:
+            str -- The name of the data provider.
+        """
 
-    # Check whether we are able to make the request given our limitations
     @abstractmethod
-    def make_request(self):
-        pass
+    def make_request(self) -> None:
+        """Determines whether a request can be made at this point in time; if it cannot
+        the thread will sleep until it can make the request.
+        """
 
 class AlphaVantageProvider(Provider):
 
@@ -52,5 +59,5 @@ class AlphaVantageProvider(Provider):
                 self.lock.release()
                 can_continue = True
             if not can_continue:
-                print('[DataLink] Thread waiting as max requets have occurred...')
+                print('[DataLink] Thread waiting as max requests have occurred...')
                 sleep(10)
