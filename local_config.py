@@ -19,3 +19,9 @@ REST_LOGGER = logging.getLogger("REST")
 REST_LOGGER.setLevel(logging.ERROR)
 DEFAULT_KEY = "[insert key here]"
 os.environ['ALPHAVANTAGE_API_KEY'] = DEFAULT_KEY
+if os.path.exists("datafeed/defaults/key.txt"):
+    try:
+        F = open("datafeed/defaults/key.txt", "r")
+        os.environ['ALPHAVANTAGE_API_KEY'] = F.readline().strip()
+    except Exception:
+        DATA_LOGGER.error("Error occurred loading AlphaVantage API key.")

@@ -11,8 +11,8 @@ class Asset(Document):
     name = StringField(required=True)
     price = FloatField()
     timestamp = DateTimeField()
+    earliest_timestamp = DateTimeField()
     meta = {'allow_inheritance': True}
-    test = False
 
     @staticmethod
     def autocomplete_by_name(name: str) -> 'QuerySet[Asset]':
@@ -76,7 +76,8 @@ class Asset(Document):
             "id": self.get_id(),
             "name": self.get_name(),
             "ticker": self.get_ticker(),
-            "class": self.get_asset_class()
+            "class": self.get_asset_class(),
+            "earliest_date": self.get_earliest_timestamp()
         }
 
     def compare_candle_percent(self, candle: 'Asset', use_close: bool = True) -> float:
@@ -158,7 +159,17 @@ class Asset(Document):
             "current": self.compare_candle_percent(last_candle),
             "previous": last_candle.get_performance_percent(),
             "combined": self.compare_candle_percent(last_candle, False)
-        }    
+        }
+
+    def get_earliest_timestamp(self) -> datetime:
+        """Returns the earliest date timestamp on a candle for the Asset.
+        
+        Returns:
+            datetime -- The timestamp of the earliest candle.
+        """
+        if self.earliest_timestamp is None:
+            return None
+        return self.earliest_timestamp.date()
 
     def get_first_candle(self, interval: int = INTERVAL_DAY) -> 'Candle':
         """Returns the first candle for the asset on the given interval.
@@ -235,6 +246,14 @@ class Asset(Document):
         last_update_diff = ((datetime.utcnow()-self.timestamp).total_seconds())
         return last_update_diff < interval
 
+    def set_earliest_timestamp(self, timestamp: datetime) -> None:
+        """Sets the earliest timestamp on a candle for the Asset.
+        
+        Arguments:
+            timestamp {datetime} -- The new earliest timestamp on a Candle.
+        """
+        self.earliest_timestamp = timestamp
+
     def set_price(self, price: float) -> None:
         """Sets the price of the asset to that specified.
         
@@ -250,6 +269,14 @@ class Asset(Document):
             timestamp {datetime} -- Timestamp at which the price of the asset is given.
         """
         self.timestamp = timestamp
+
+    def update_earliest_timestamp(self) -> None:
+        """Update the earliest timestamp on a daily candle according to the first
+        Candle that can be found.
+        """
+        earliest_candle = self.get_first_candle()
+        if earliest_candle is not None:
+            self.set_earliest_timestamp(earliest_candle.get_open_time())
 
 class Currency(Asset):
     pass
