@@ -252,6 +252,8 @@ class CurrencyUpdaterDaily(IntervalUpdater):
         if candles:
             # if we have candles to insert, then insert them all now
             Candle.objects.insert(candles)
+            asset.update_earliest_timestamp()
+            asset.save()
         else:
             target_day = datetime.utcnow().date()
             filler_candle_stamp = latest_candle.get_open_time() + timedelta(days=1)
@@ -260,6 +262,7 @@ class CurrencyUpdaterDaily(IntervalUpdater):
                 filler_candle_stamp = filler_candle_stamp + timedelta(days=1)
             if candles:
                 Candle.objects.insert(candles)
+        
         CONFIG.DATA_LOGGER.info("CurrencyUpdaterDaily -> sync_asset(%s) -> finish(sync)", asset.get_name())
         return [True, len(candles)]
 
@@ -501,6 +504,8 @@ class StockUpdaterDaily(IntervalUpdater):
         if candles:
             # if we have candles to insert, then insert them all now
             Candle.objects.insert(candles)
+            asset.update_earliest_timestamp()
+            asset.save()
         else:
             target_day = datetime.utcnow().date()
             filler_candle_stamp = latest_candle.get_open_time() + timedelta(days=1)
