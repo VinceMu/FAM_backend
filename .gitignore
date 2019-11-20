@@ -105,3 +105,6 @@ venv.bak/
 
 # Random Bat fields
 *.bat
+
+# Key File
+datafeed/key.txt
