@@ -1,171 +1,147 @@
-from flask import make_response, jsonify, send_file
-from flask_restplus import Namespace, Resource, fields, abort
+from flask import jsonify, make_response, Response
+from flask_restplus import abort, Namespace, Resource
 from flask_jwt_extended import get_jwt_identity, jwt_required
-from bson import ObjectId
-import dateutil.parser
-from models import *
-from bson import ObjectId
 from werkzeug.datastructures import FileStorage
 
-api = Namespace('users', description='users endpoint')
+from models.asset import Asset
+from models.user import User
 
-@api.route('/assets')
-class UserAssets(Resource):
-    @jwt_required
-    def get(self):
-        user = User.objects(email=get_jwt_identity()).first()
-        if user == None:
-            return abort(401, "forbidden")
-        else:
-            owned_assets = []
-            for asset_ownership in user.assets:
-                owned_assets.append(asset_ownership.serialize())
-            return make_response(jsonify(owned_assets), 200)
+API = Namespace('users', description='users endpoint')
 
-@api.route('/portfolio/current')
+@API.route('/portfolio/current')
 class UserPortfolioCurrent(Resource):
-    @jwt_required
-    def get(self):
-        user = User.objects(email=get_jwt_identity()).first()
-        if user == None:
-            return abort(401, "forbidden")
-        value = 0
-        spent_value = 0
-        for transaction in user.assets:
-            date_purchased = transaction.date_purchased.date()
-            start_candle = transaction.asset.get_daily_candle(86400, date_purchased)
-            spent_value -= (transaction.quantity * start_candle.close)
-            if transaction.date_sold != None:
-                date_sold = transaction.date_sold.date()
-                end_candle = transaction.asset.get_daily_candle(86400, date_sold)
-                spent_value += (transaction.quantity * end_candle.close)
-            else:
-                value += (transaction.asset.price * transaction.quantity)
-        result = {
-            "purchase_value": spent_value,
-            "net_value": value + spent_value,
-            "value": value
-        }
-        return make_response(jsonify(result), 200)
 
-@api.route('/portfolio/historical')
+    @jwt_required
+    def get(self) -> Response:
+        """Endpoint (private) provides the details of the current value of the User's portfolio.
+        
+        Returns:
+            Response -- The Flask response object.
+        """
+        user = User.get_by_email(get_jwt_identity())
+        if user is None:
+            return abort(403, "You are not permitted to access this endpoint.")
+        return make_response(jsonify(user.get_portfolio_current()), 200)
+
+@API.route('/portfolio/historical')
 class UserPortfolioHistorical(Resource):
-    @jwt_required
-    def get(self):
-        user = User.objects(email=get_jwt_identity()).first()
-        if user == None:
-            return abort(401, "forbidden")
-        value = {}
-        spent_value = {}
-        earliest_date = None
-        loop_end_date = datetime.datetime.utcnow().date()
-        for transaction in user.assets:
-            date_purchased = transaction.date_purchased.date() if (transaction.date_purchased != None) else None
-            if earliest_date == None or date_purchased < earliest_date:
-                earliest_date = date_purchased
-            date_sold = (transaction.date_sold.date()+datetime.timedelta(days=1)) if (transaction.date_sold != None) else None
-            candles = transaction.asset.get_daily_candles(86400, date_purchased, date_sold)
-            start_price = candles[len(candles)-1].close
-            if len(candles) == 1:
-                end_price = start_price
-            else:
-                end_price = candles[0].close
-            for candle in candles:
-                tag = str(candle.close_time.date())
-                if tag in value:
-                    value[tag] = value[tag] + (candle.close * transaction.quantity)
-                    spent_value[tag] = spent_value[tag] - (transaction.quantity * start_price)
-                else:
-                    value[tag] = (candle.close * transaction.quantity)
-                    spent_value[tag] = -(transaction.quantity * start_price)
-            if date_sold != None:
-                loop_start_date = date_sold
-                while loop_start_date < loop_end_date:
-                    other_tag = str(loop_start_date)
-                    if other_tag in spent_value:
-                        spent_value[other_tag] = spent_value[other_tag] + (transaction.quantity * (end_price - start_price))
-                    else:
-                        spent_value[other_tag] = (transaction.quantity * (end_price - start_price))
-                    loop_start_date = loop_start_date + datetime.timedelta(days=1)
-        if len(value) == 0 and len(spent_value) == 0:
-            return make_response(jsonify({}))
-        result = {}
-        # Check all date values have been filled and combined
-        while earliest_date < loop_end_date:
-            mytag = str(earliest_date)
-            if mytag not in value:
-                value[mytag] = 0
-            if mytag not in spent_value:
-                spent_value[mytag] = 0
-            result[mytag] = {
-                "purchase_value": spent_value[mytag],
-                "net_value": value[mytag] + spent_value[mytag],
-                "value": value[mytag]
-            }
-            earliest_date = earliest_date + datetime.timedelta(days=1)
-        return make_response(jsonify(result), 200)
 
-@api.route('/read_picture')
+    @jwt_required
+    def get(self) -> Response:
+        """Endpoint (private) provides the details of the historical value of the User's portfolio.
+        
+        Returns:
+            Response -- The Flask response object.
+        """
+        user = User.get_by_email(get_jwt_identity())
+        if user is None:
+            return abort(403, "You are not permitted to access this endpoint.")
+        historical_portfolio = user.get_portfolio_historical()
+        if historical_portfolio is None:
+            user.update_portfolio_historical()
+            user.save()
+            historical_portfolio = user.get_portfolio_historical()
+            if historical_portfolio is None:
+                return abort(500, "An error occurred calculating the user's historical portfolio value.")
+        return make_response(jsonify(historical_portfolio), 200)
+
+@API.route('/transactions')
+class UserTransactions(Resource):
+
+    @jwt_required
+    def get(self) -> Response:
+        """Endpoint (private) provides the details of all the transactions a User has made. 
+        
+        Returns:
+            Response -- The Flask response object.
+        """
+        user = User.get_by_email(get_jwt_identity())
+        if user is None:
+            return abort(403, "You are not permitted to access this endpoint.")
+        transactions = user.get_transactions()
+        transactions_json = [transaction.as_dict() for transaction in transactions]
+        return make_response(jsonify(transactions_json), 200)
+
+@API.route('/read_picture')
 class ReadPictureUser(Resource):
-    @jwt_required
-    def get(self):
-        user = User.objects(email=get_jwt_identity()).first()
-        if user is None:
-            return abort(401, "forbidden")
-        content = user.picture.read()
-        if content == None:
-            return abort(404, "no image")
-        response = make_response(content)
-        response.headers.set("Content-Type", user.picture.content_type)
-        response.headers.set("Content-Disposition", "attachment", filename=user.picture.filename)
-        return response
 
-@api.route('/read')
-class ReadUser(Resource):
     @jwt_required
-    def get(self):
-        user = User.objects(email=get_jwt_identity()).first()
+    def get(self) -> Response:
+        """Endpoint (private) provides access to a given User's profile picture.
+        
+        Returns:
+            Response -- The Flask response object.
+        """
+        user = User.get_by_email(get_jwt_identity())
         if user is None:
-            return abort(401, "forbidden")
+            return abort(403, "You are not permitted to access this endpoint.")
+        picture = user.get_picture()
+        if picture is None:
+            return abort(404, "The given user doesn't have a profile picture set.")
+        return picture
+
+@API.route('/read')
+class ReadUser(Resource):
+
+    @jwt_required
+    def get(self) -> Response:
+        """Endpoint (private) provides access to a User's profile details.
+        
+        Returns:
+            Response -- The Flask response object.
+        """
+        user = User.get_by_email(get_jwt_identity())
+        if user is None:
+            return abort(401, "You are not permitted to access this endpoint.")
         return make_response(jsonify(user.as_dict()), 200)
 
-update_parser = api.parser()
-update_parser.add_argument("fullname", type=str, required=False, help="The full name of the user", location="json")
-update_parser.add_argument("currency_id", type=str, required=False, help="The ID of the base currency to be used", location="json")
+UPDATE_PARSER = API.parser()
+UPDATE_PARSER.add_argument("fullname", type=str, required=False, help="The full name of the user", location="json")
+UPDATE_PARSER.add_argument("currency_id", type=str, required=False, help="The ID of the base currency to be used", location="json")
 
-@api.route('/update')
+@API.route('/update')
 class UpdateUser(Resource):
+
     @jwt_required
-    @api.expect(update_parser)
-    def patch(self):
-        args = update_parser.parse_args()
-        user = User.objects(email=get_jwt_identity()).first()
+    @API.expect(UPDATE_PARSER)
+    def patch(self) -> Response:
+        """Endpoint (private) allows a User to update their profile details.
+        
+        Returns:
+            Response -- The Flask response object.
+        """
+        args = UPDATE_PARSER.parse_args()
+        user = User.get_by_email(get_jwt_identity())
         if user is None:
-            return abort(401, "forbidden")
+            return abort(401, "You are not permitted to access this endpoint.")
         if args['fullname'] is not None:
-            user.fullname = args['fullname']
+            user.set_name(args['fullname'])
         if args['currency_id'] is not None:
-            if not ObjectId.is_valid(args['currency_id']):
-                return abort(400, "invalid currency id")
-            currency = Currency.objects(pk=args['currency_id']).first()
+            currency = Asset.get_by_id(args['currency_id'])
             if currency is None:
-                return abort(400, "currency not found")
-            user.base_currency = currency
+                return abort(400, "An invalud {currency_id} was given as a base currency.")
+            user.set_base_currency(currency)
         user.save()
-        return make_response("Success", 200)
+        return make_response(jsonify({"msg": "The user details have been successfully updated."}), 200)
 
-upload_parser = api.parser()
-upload_parser.add_argument("profile_picture", type=FileStorage, required=True, help='A profile picture for the user', location='files')
+UPLOAD_PARSER = API.parser()
+UPLOAD_PARSER.add_argument("profile_picture", type=FileStorage, required=True, help='A profile picture for the user', location='files')
 
-@api.route('/upload')
+@API.route('/upload')
 class UploadUser(Resource):
+
     @jwt_required
-    @api.expect(upload_parser)
-    def post(self):
-        args = upload_parser.parse_args()
-        user = User.objects(email=get_jwt_identity()).first()
-        if user == None:
-            return abort(401, 'forbidden')
-        user.picture.replace(args['profile_picture'])
+    @API.expect(UPLOAD_PARSER)
+    def post(self) -> Response:
+        """Endpoint (private) allows a user to update their profile picture (via upload).
+        
+        Returns:
+            Response -- The Flask response object.
+        """
+        args = UPLOAD_PARSER.parse_args()
+        user = User.get_by_email(get_jwt_identity())
+        if user is None:
+            return abort(401, "You are not permitted to access this endpoint.")
+        user.set_picture(args['profile_picture'])
         user.save()
-        return make_response("Success", 200)
+        return make_response(jsonify({"msg": "The user's profile picture has been successfully updated."}), 200)

@@ -1,113 +1,143 @@
-from flask_restplus import Namespace, Resource, fields, abort
-from controllers import authentication_controller
-from flask import jsonify, request, make_response
-from flask_jwt_extended import jwt_refresh_token_required,get_jwt_identity,get_raw_jwt, jwt_required
-from globals import jwt
-from models import *
-import hashlib, uuid, secrets
+from flask import jsonify, make_response, Response
+from flask_jwt_extended import get_jwt_identity, get_raw_jwt, jwt_refresh_token_required, jwt_required
+from flask_restplus import abort, Namespace, Resource
+from globals import JWT
 
-api = Namespace('auth', description='authentication endpoint')
+from local_config import REST_LOGGER
+from models.auth import Auth, AuthRevokedToken
+from models.user import User
 
-@jwt.token_in_blacklist_loader
-def check_if_token_in_blacklist(decrypted_token):
+API = Namespace('auth', description='authentication endpoint')
+
+@JWT.token_in_blacklist_loader
+def check_if_token_in_blacklist(decrypted_token: str) -> bool:
+    """Method provided to JWT for checking whether a token is on the blacklist.
+    
+    Arguments:
+        decrypted_token {str} -- The token to be checked on the blacklist.
+    
+    Returns:
+        bool -- Returns True if the token is on the blacklist; False otherwise.
+    """
     jti = decrypted_token['jti']
-    return (AuthRevokedToken.objects(jti=jti).first() is not None)
+    return AuthRevokedToken.has_token(jti)
 
-login_parser = api.parser()
-login_parser.add_argument('email', type=str, required=True, help='The users email', location='json')
-login_parser.add_argument('password', type=str, required=True, help='The users password', location='json')
+LOGIN_PARSER = API.parser()
+LOGIN_PARSER.add_argument('email', type=str, required=True, help='The users email', location='json')
+LOGIN_PARSER.add_argument('password', type=str, required=True, help='The users password', location='json')
 
-
-@api.route('/login')
+@API.route('/login')
 class Login(Resource):
 
-    @api.expect(login_parser)
-    def post(self):
-        args = login_parser.parse_args()
-        is_authenticated, user = authentication_controller.authenticate_user(args["email"],
-                                                                          args["password"])
-        if is_authenticated:
-            tokens = authentication_controller.generate_tokens(args["email"])
+    @API.expect(LOGIN_PARSER)
+    def post(self) -> Response:
+        """Endpoint (public) is responsible for authenticating an end user.
+        
+        Returns:
+            Response -- The Flask response object.
+        """
+        args = LOGIN_PARSER.parse_args()
+        if Auth.authenticate(args['email'], args['password']) is not None:
+            REST_LOGGER.info("auth/login -> Authenticated login for user %s", args['email'])
+            tokens = Auth.generate_tokens(args['email'])
             return make_response(jsonify(tokens), 200)
-        else:
-            return abort(401,"login failed")
+        REST_LOGGER.info("auth/login -> Denied login for user %s", args['email'])
+        return abort(401, "Invalid {email} or {password} given.")
 
-@api.route('/logout')
+@API.route('/logout')
 class Logout(Resource):
 
     @jwt_required
-    def delete(self):
-        jti = get_raw_jwt()['jti']
-        new_revoked = AuthRevokedToken(jti=jti)
-        new_revoked.save()
-        return make_response(jsonify({"msg": "Successfully logged out"}), 200)
+    def delete(self) -> Response:
+        """Endpoint (private) is responsible for partially logging out a user - 
+        disabling access token only.
+        
+        Returns:
+            Response -- The Flask response object.
+        """
+        AuthRevokedToken.create(get_raw_jwt()['jti'])
+        REST_LOGGER.info("auth/logout -> Logout (stage 1) for user %s", get_jwt_identity())
+        return make_response(jsonify({"msg": "Successfully logged out."}), 200)
 
-@api.route('/logout_refresh')
+@API.route('/logout_refresh')
 class LogoutRefresh(Resource):
 
     @jwt_refresh_token_required
-    def delete(self):
-        jti = get_raw_jwt()['jti']
-        new_revoked = AuthRevokedToken(jti=jti)
-        new_revoked.save()
-        return jsonify({"msg": "Successfully logged out"}, 200)
+    def delete(self) -> Response:
+        """Endpoint (private) is responsible for finishing the logout - blacklisting
+        the refresh token also.
+        
+        Returns:
+            Response -- The Flask response object.
+        """
+        AuthRevokedToken.create(get_raw_jwt()['jti'])
+        REST_LOGGER.info("auth/logout_refresh -> Logout (stage 2) for user %s", get_jwt_identity())
+        return make_response(jsonify({"msg": "Successfully logged out."}), 200)
 
-@api.route('/refresh')
+@API.route('/refresh')
 class Refresh(Resource):
 
     @jwt_refresh_token_required
-    def post(self):
-        curr_user = get_jwt_identity()
-        new_access_token = authentication_controller.generate_access_token(curr_user)
-        return make_response(jsonify(new_access_token), 200)
+    def post(self) -> Response:
+        """Endpoint (private) is responsible for generating the user new access tokens
+        from their refresh tokens.
+        
+        Returns:
+            Response -- The Flask response object.
+        """
+        REST_LOGGER.info("auth/refresh -> Refresh access token for user %s", get_jwt_identity())
+        return make_response(jsonify(Auth.generate_access_token(get_jwt_identity())), 200)
 
-register_parser = api.parser()
-register_parser.add_argument('email', type=str, required=True, help='The users email', location='json')
-register_parser.add_argument('password', type=str, required=True, help='The users password', location='json')
-register_parser.add_argument('fullname', type=str, required=True, help='The users full name', location='json')
+REGISTER_PARSER = API.parser()
+REGISTER_PARSER.add_argument('email', type=str, required=True, help='The users email', location='json')
+REGISTER_PARSER.add_argument('password', type=str, required=True, help='The users password', location='json')
+REGISTER_PARSER.add_argument('fullname', type=str, required=True, help='The users full name', location='json')
 
-@api.route('/register')
+@API.route('/register')
 class Register(Resource):
 
-    @api.expect(register_parser)
-    def post(self):
-        args = register_parser.parse_args()
-        #  Hash and Salt password
-        salt = secrets.token_hex(8)
-        salted_password = str(args['password'] + salt).encode('utf8')
-        hash_password = hashlib.sha256(salted_password).hexdigest()
+    @API.expect(REGISTER_PARSER)
+    def post(self) -> Response:
+        """Endpoint (public) for registering a user account on the platform.
+        
+        Returns:
+            Response -- The Flask response object.
+        """
+        args = REGISTER_PARSER.parse_args()
+        check_auth = Auth.get_by_email(args['email'])
+        if check_auth is not None:
+            REST_LOGGER.info("auth/register -> Duplicate registration attempt for email %s", args['email'])
+            return abort(409, "A user already exists with that {email}.")
+        user_auth = Auth.create(args['email'], args['password'])
+        if user_auth is None:
+            REST_LOGGER.info("auth/register -> Fail on Auth.create() with email %s", args['email'])
+            return abort(401, "Failed to create an account with the given {email}.")
+        user = User.create(args['email'], args['fullname'])
+        if user is None:
+            REST_LOGGER.error("auth/register -> Fail on User.create() with email %s", args['email'])
+            return abort(401, "Failed to create an account with the given {email}.")
+        REST_LOGGER.info("auth/register -> User registered with email %s", args['email'])
+        return make_response(jsonify(Auth.generate_tokens(args['email'])))
 
-        if Auth.objects(email=args['email']):
-            # Found one, don't create new
-            # Return with Error Code 409 - Conflict. No duplicate users
-            return abort(409, "account with that email already exists")
-        else:
-            try:
-                new_auth = Auth(email=args['email'], password=hash_password, salt=salt)
-                new_auth.save()
-                new_user = User(email=args['email'], fullname=args['fullname'])
-                new_user.save()
-                tokens = authentication_controller.generate_tokens(args["email"])
-                return make_response(jsonify(tokens), 201)
-            except:
-                return None, 500
+UPDATE_PARSER = API.parser()
+UPDATE_PARSER.add_argument("old_password", type=str, required=True, help="The user's old password", location="json")
+UPDATE_PARSER.add_argument("new_password", type=str, required=True, help="The user's new password", location="json")
 
-update_parser = api.parser()
-update_parser.add_argument("old_password", type=str, required=True, help="The user's old password", location="json")
-update_parser.add_argument("new_password", type=str, required=True, help="The user's new password", location="json")
-
-@api.route("/update")
+@API.route("/update")
 class UpdateAuth(Resource):
-    @api.expect(update_parser)
+    
     @jwt_required
-    def put(self):
-        args = update_parser.parse_args()
-        is_authenticated, auth = authentication_controller.authenticate_user(get_jwt_identity(), args["old_password"])
-        if auth == None or is_authenticated == False:
-            return abort(401, "forbidden")
-        auth.salt = secrets.token_hex(8)
-        salted_pass = str(args['new_password'] + auth.salt).encode("utf8")
-        auth.password = hashlib.sha256(salted_pass).hexdigest()
+    @API.expect(UPDATE_PARSER)
+    def put(self) -> Response:
+        """Endpoint (private) responsible for updating a user's password.
+        
+        Returns:
+            Response -- The Flask response object.
+        """
+        args = UPDATE_PARSER.parse_args()
+        auth = Auth.authenticate(get_jwt_identity(), args['old_password'])
+        if auth is None:
+            return abort(401, "Invalid credentials supplied.")
+        auth.update_password(args['new_password'])
         auth.save()
-        return make_response("Success", 200)
-
+        return make_response(jsonify({"msg": "The user password has been successfully updated."}), 200)
