@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta
 from typing import List
-
+import base64
 from flask import make_response
 from mongoengine import DateTimeField, DictField, Document, FileField, ListField, ReferenceField, StringField
 
@@ -145,7 +145,7 @@ class User(Document):
         content = self.picture.read()
         if content is None:
             return None
-        response = make_response(content)
+        response = make_response(base64.encodestring(content))
         response.headers.set("Content-Type", self.picture.content_type)
         response.headers.set("Content-Disposition", "attachment", filename=self.picture.filename)
         return response
