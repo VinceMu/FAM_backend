@@ -150,8 +150,6 @@ class Asset(Document):
             dict -- A dictionary containing values for 'previous' and 'current' reflecting
             the percentage change as specified.
         """
-        if self.has_recent_update() is False:
-            return 0
         last_candle = self.get_last_candle(market_open=True)
         if last_candle is None:
             return None
