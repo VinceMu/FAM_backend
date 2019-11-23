@@ -59,7 +59,7 @@ class HistoricalDaily(Resource):
                 end_date = parser.parse(args['end_date'])
             except Exception:
                 abort(400, "Invalid {end_date} given.")
-        candles = asset.get_candles_within(start=start_date, finish=end_date)
+        candles = asset.get_candles_within(start=start_date, finish=end_date, exclude_filler=True)
         candles_dict = [candle.as_dict() for candle in candles]
         return make_response(jsonify(candles_dict), 200)
 
@@ -100,7 +100,7 @@ class HistoricalInterval(Resource):
                 abort(400, "Invalid {end_datetime} given.")
         if args['interval'] <= 0:
             abort(400, "Invalid {interval} given.")
-        candles = asset.get_candles_within(start=start_date, finish=end_date, interval=args['interval'])
+        candles = asset.get_candles_within(start=start_date, finish=end_date, interval=args['interval'], exclude_filler=True)
         candles_dict = [candle.as_dict() for candle in candles]
         return make_response(jsonify(candles_dict), 200)
 

@@ -127,7 +127,7 @@ class Asset(Document):
         """
         return Candle.get_asset(self, interval)
 
-    def get_candles_within(self, interval: int = INTERVAL_DAY, start: datetime = datetime.min, finish: datetime = datetime.max, exclude_start: bool = False, exclude_finish: bool = False) -> 'QuerySet[Candle]':
+    def get_candles_within(self, interval: int = INTERVAL_DAY, start: datetime = datetime.min, finish: datetime = datetime.max, exclude_start: bool = False, exclude_finish: bool = False, exclude_filler: bool = False) -> 'QuerySet[Candle]':
         """Returns the candles for the asset on the given Candle interval within the timeframe specified.
         
         Keyword Arguments:
@@ -136,11 +136,12 @@ class Asset(Document):
             finish {datetime} -- The finishing datetime of the interval. (default: {datetime.datetime.max})
             exclude_start {bool} -- Whether to exclude the start datetime from the interval. (default: {False})
             exclude_finish {bool} -- Whether to exclude the finish datetime from the interval. (default: {False})
+            exclude_filler {bool} -- Whether to exclude filler candles from the results. (default: {False})
         
         Returns:
             QuerySet[Candle] -- An iterable QuerySet containing Candles in the collection which match the query.
         """
-        return Candle.get_asset_within(self, interval, start, finish, exclude_start, exclude_finish)
+        return Candle.get_asset_within(self, interval=interval, start=start, finish=finish, exclude_start=exclude_start, exclude_finish=exclude_finish, exclude_filler=exclude_filler)
 
     def get_daily_candle(self, date: datetime) -> 'Candle':
         """Returns the model.constants.INTERVAL_DAY candle for the given date.
