@@ -75,6 +75,11 @@ class HistoricalInterval(Resource):
     @jwt_required
     @API.expect(HISTORICAL_INTERVAL_PARSER)
     def get(self) -> Response:
+        """Endpoint (private) provides the historical candle data for a given asset and interval.
+        
+        Returns:
+            Response -- The Flask response object.
+        """
         args = HISTORICAL_INTERVAL_PARSER.parse_args()
         asset = Asset.get_by_id(args['asset_id'])
         if asset is None:

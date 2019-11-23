@@ -613,7 +613,17 @@ class AssetUpdaterAggregation(IntervalUpdater):
         self.provider = provider
         self.source = source
 
-    def aggregate_candles(self, asset, interval, candles):
+    def aggregate_candles(self, asset: 'Asset', interval: int, candles: 'QuerySet[Candle]') -> 'Candle':
+        """Combines multiple candles into a given candle of the given interval.
+        
+        Arguments:
+            asset {Asset} -- The Asset for the resulting Candle is for.
+            interval {int} -- The time interval (in seconds) of the Candle.
+            candles {QuerySet[Candle]} -- An iterable QuerySet of the Candles to be combined.
+        
+        Returns:
+            Candle -- The resulting aggregate Candle for the given data.
+        """
         low_price = None
         high_price = None
         volume = 0
@@ -654,11 +664,26 @@ class AssetUpdaterAggregation(IntervalUpdater):
         pool.join()
         CONFIG.DATA_LOGGER.info("AssetUpdaterAggregation -> do_update() -> finish")
 
-    def sync_asset(self, asset: 'Asset'):
+    def sync_asset(self, asset: 'Asset') -> None:
+        """Calculates the weekly & monthly candles for the given asset.
+        
+        Arguments:
+            asset {Asset} -- The Asset to aggregate the Candles for.
+        """
         self.sync_asset_weekly(asset)
         self.sync_asset_monthly(asset)
 
     def sync_asset_monthly(self, asset: 'Asset') -> List:
+        """Calculates the monthly candles based on an aggregation of daily candles
+        for the given asset.
+        
+        Arguments:
+            asset {Asset} -- The Asset to perform the calculations on.
+        
+        Returns:
+            List -- Returns in a List whether the update was successful (bool) and the
+            number of candles inserted (int).
+        """
         CONFIG.DATA_LOGGER.info("AssetUpdaterAggregation -> sync_asset_monthly(%s) -> start", asset.get_name())
         last_candle = asset.get_last_candle(interval=INTERVAL_MONTH)
         candles = []
@@ -695,6 +720,16 @@ class AssetUpdaterAggregation(IntervalUpdater):
 
 
     def sync_asset_weekly(self, asset: 'Asset') -> List:
+        """Calculates the weekly candles based on an aggregation of daily candles
+        for the given asset.
+        
+        Arguments:
+            asset {Asset} -- The Asset to perform the calculations on.
+        
+        Returns:
+            List -- Returns in a List whether the update was successful (bool) and the
+            number of candles inserted (int).
+        """
         CONFIG.DATA_LOGGER.info("AssetUpdaterAggregation -> sync_asset_weekly(%s) -> start", asset.get_name())
         last_candle = asset.get_last_candle(interval=INTERVAL_WEEK)
         candles = []
