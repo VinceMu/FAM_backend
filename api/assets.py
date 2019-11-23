@@ -157,3 +157,25 @@ class ReadAsset(Resource):
             return abort(400, "Invalid {asset_id} given.")
         asset_dict = asset.as_dict()
         return make_response(jsonify(asset_dict), 200)
+
+TRENDS_READ_PARSER = API.parser()
+TRENDS_READ_PARSER.add_argument('asset_id', type=str, required=True, help='The ID of the asset', location='args')
+
+@API.route('/trends/read')
+class TrendsRead(Resource):
+
+    @jwt_required
+    @API.expect(TRENDS_READ_PARSER)
+    def get(self) -> Response:
+        """Endpoint (private) for providing the Google Trends data associated with an Asset.
+        
+        Returns:
+            Response -- The Flask response object.
+        """
+        args = TRENDS_READ_PARSER.parse_args()
+        asset = Asset.get_by_id(args['asset_id'])
+        if asset is None:
+            return abort(400, "Invalid {asset_id} given.")
+        trends = asset.get_trends()
+        trends_dict = [trend.as_dict() for trend in trends]
+        return make_response(jsonify(trends_dict), 200)

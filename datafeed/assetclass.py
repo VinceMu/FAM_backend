@@ -3,6 +3,7 @@ from datetime import datetime, timedelta
 from time import sleep
 from typing import List
 import csv
+import json
 import multiprocessing.dummy as mp
 
 from alpha_vantage.foreignexchange import ForeignExchange
@@ -10,11 +11,13 @@ from alpha_vantage.timeseries import TimeSeries
 from dateutil import parser
 from dateutil.relativedelta import relativedelta
 from dateutil.tz import UTC
+from pytrends.request import TrendReq
 import dateutil.tz as tz
 
 from models.asset import Currency, Stock
 from models.candle import Candle
 from models.constants import INTERVAL_DAY, INTERVAL_HOUR, INTERVAL_MINUTE, INTERVAL_MONTH, INTERVAL_WEEK
+from models.trend import Trend
 import local_config as CONFIG
 
 DAILY_COMPACT_THRESHOLD = 99
@@ -27,8 +30,9 @@ MAX_BULK_QUERY = 100
 class AssetClass(ABC):
 
     @abstractmethod
-    def __init__(self, provider):
+    def __init__(self, provider, trends_provider):
         self.provider = provider
+        self.trends_provider = trends_provider
         self.updaters = []
 
     @abstractmethod
@@ -88,8 +92,8 @@ class IntervalUpdater(ABC):
 
 class CurrencyClass(AssetClass):
 
-    def __init__(self, provider):
-        super(CurrencyClass, self).__init__(provider)
+    def __init__(self, provider, trends_provider):
+        super(CurrencyClass, self).__init__(provider, trends_provider)
         self.api = ForeignExchange()
         self.updaters = []
 
@@ -117,6 +121,7 @@ class CurrencyClass(AssetClass):
         self.updaters.append(CurrencyUpdaterLive(self.api, self.provider))
         self.updaters.append(CurrencyUpdaterDaily(self.api, self.provider))
         self.updaters.append(AssetUpdaterAggregation(self.api, self.provider, Currency.objects))
+        self.updaters.append(AssetUpdaterTrends(None, self.trends_provider, Currency.objects))
         CONFIG.DATA_LOGGER.info("CurrencyClass -> on_startup() -> finish")
 
 class CurrencyUpdaterDaily(IntervalUpdater):
@@ -134,6 +139,7 @@ class CurrencyUpdaterDaily(IntervalUpdater):
         pool.close()
         pool.join()
         CONFIG.DATA_LOGGER.info("CurrencyUpdaterDaily -> do_update() -> finish")
+        self.last_update = datetime.utcnow()
 
     def sync_asset(self, asset: 'Asset') -> List:
         """Updates the daily currency data for the specified asset.
@@ -283,6 +289,7 @@ class CurrencyUpdaterLive(IntervalUpdater):
         pool.close()
         pool.join()
         CONFIG.DATA_LOGGER.info("CurrencyUpdaterLive -> do_update() -> finish")
+        self.last_update = datetime.utcnow()
 
     def sync_asset(self, asset: 'Asset') -> List:
         """Updates the live currency price for the specified asset.
@@ -337,9 +344,10 @@ class CurrencyUpdaterLive(IntervalUpdater):
 
 class StockClass(AssetClass):
 
-    def __init__(self, provider):
+    def __init__(self, provider, trends_provider):
         self.api = TimeSeries()
         self.provider = provider
+        self.trends_provider = trends_provider
         self.updaters = []
 
     def get_name(self):
@@ -368,6 +376,7 @@ class StockClass(AssetClass):
         self.updaters.append(StockUpdaterLive(self.api, self.provider))
         self.updaters.append(StockUpdaterDaily(self.api, self.provider))
         self.updaters.append(AssetUpdaterAggregation(self.api, self.provider, Stock.objects))
+        self.updaters.append(AssetUpdaterTrends(None, self.trends_provider, Stock.objects))
         CONFIG.DATA_LOGGER.info("StocksClass -> on_startup() -> finish")
 
 class StockUpdaterDaily(IntervalUpdater):
@@ -385,6 +394,7 @@ class StockUpdaterDaily(IntervalUpdater):
         pool.close()
         pool.join()
         CONFIG.DATA_LOGGER.info("StockUpdaterDaily -> do_update() -> finish")
+        self.last_update = datetime.utcnow()
 
     def sync_asset(self, asset: 'Asset') -> List:
         """Updates the daily stock data for the specified asset.
@@ -544,6 +554,7 @@ class StockUpdaterLive(IntervalUpdater):
         pool.close()
         pool.join()
         CONFIG.DATA_LOGGER.info("StockUpdaterLive -> do_update() -> finish")
+        self.last_update = datetime.utcnow()
 
     def sync_asset(self, tickers: List[str]) -> List:
         """Updates the live stock prices for the specified assets.
@@ -663,6 +674,7 @@ class AssetUpdaterAggregation(IntervalUpdater):
         pool.close()
         pool.join()
         CONFIG.DATA_LOGGER.info("AssetUpdaterAggregation -> do_update() -> finish")
+        self.last_update = datetime.utcnow()
 
     def sync_asset(self, asset: 'Asset') -> None:
         """Calculates the weekly & monthly candles for the given asset.
@@ -769,3 +781,68 @@ class AssetUpdaterAggregation(IntervalUpdater):
             Candle.objects.insert(candles)
         CONFIG.DATA_LOGGER.info("AssetUpdaterAggregation -> sync_asset_weekly(%s) -> finish", asset.get_name())
         return [True, len(candles)]
+
+class AssetUpdaterTrends(IntervalUpdater):
+    def __init__(self, api, provider, source):
+        self.api = api
+        self.interval = INTERVAL_MINUTE
+        self.last_update = None
+        self.name = "Trends"
+        self.provider = provider
+        self.source = source
+
+    def do_update(self):
+        CONFIG.DATA_LOGGER.info("AssetUpdaterTrends -> do_update() -> start")
+        unused_quota = self.provider.get_unused_quota()
+        if unused_quota == 0:
+            return
+        for asset in self.source:
+            if asset.get_latest_trend() is None and asset.get_latest_trend_timestamp() is not None:
+                continue
+            if asset.get_latest_trend() is None or (datetime.utcnow()-asset.get_latest_trend().get_timestamp()).total_seconds() > 10*INTERVAL_DAY:
+                self.sync_trends(asset)
+                unused_quota -= 1
+            if unused_quota <= 0:
+                break
+        CONFIG.DATA_LOGGER.info("AssetUpdaterTrends -> do_update() -> finish")
+
+    def sync_trends(self, asset: 'Asset') -> List:
+        """Sync the Google Trends data for the specified asset.
+        
+        Arguments:
+            asset {Asset} -- The Asset trend data to update.
+        
+        Returns:
+            [type] -- Returns a List reflecting whether the update was successful (bool)
+            and the number of entries updated (int).
+        """
+        CONFIG.DATA_LOGGER.info("AssetUpdaterTrends -> sync_trends(%s) -> start", asset.get_name())
+        self.provider.make_request()
+        latest_trend = asset.get_latest_trend()
+        if latest_trend is not None and latest_trend.get_timestamp() is not None:
+            latest_stamp = latest_stamp.get_timestamp().date()
+        else:
+            latest_stamp = None
+        request = TrendReq()
+        request.build_payload([asset.get_name()])
+        trends = []
+        try:
+            trends_over_time = request.interest_over_time()
+            json_obj = json.loads(trends_over_time.to_json(orient="index", date_format="iso"))
+            for given_date, _ in json_obj.items():
+                stamp = parser.parse(given_date)
+                if latest_stamp is not None and stamp.date() <= latest_stamp:
+                    break
+                trends.append(Trend(search_term=asset.get_name(), timestamp=stamp, is_partial=json_obj[given_date]["isPartial"], value=json_obj[given_date][asset.get_name()]))
+        except Exception as ex:
+            CONFIG.DATA_LOGGER.error("AssetUpdaterTrends -> sync_trends(%s) -> 1", asset.get_name())
+            CONFIG.DATA_LOGGER.exception(str(ex))
+            return [False, 0]
+        if trends:
+            Trend.objects.insert(trends)
+            asset.update_latest_trend()
+        else:
+            asset.update_latest_trend()
+        asset.save()
+        CONFIG.DATA_LOGGER.info("AssetUpdaterTrends -> sync_trends(%s) -> finish", asset.get_name())
+        return [True, len(trends)]
