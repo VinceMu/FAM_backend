@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from dateutil import parser
 from flask import jsonify, make_response, Response
 from flask_restplus import abort, Namespace, Resource
@@ -13,6 +15,7 @@ AUTOCOMPLETE_PARSER.add_argument('asset_name', type=str, required=True, help='Th
 @API.route('/autocomplete')
 class AutocompleteAsset(Resource):
 
+    @jwt_required
     @API.expect(AUTOCOMPLETE_PARSER)
     def get(self) -> Response:
         """Endpoint (public) provides the details of all assets containing the given asset_name.
@@ -136,6 +139,38 @@ class PerformanceDaily(Resource):
         if asset is None:
             return abort(400, "Invalid {asset_id} given.")
         return make_response(jsonify(asset.get_daily_performance()), 200)
+
+PRICING_PARSER = API.parser()
+PRICING_PARSER.add_argument('asset_id', type=str, required=True, help='The ID of the asset', location='args')
+PRICING_PARSER.add_argument('date', type=str, required=False, help='The date to retrieve pricing for', location='args')
+
+@API.route('/pricing')
+class PricingAsset(Resource):
+
+    @jwt_required
+    @API.expect(PRICING_PARSER)
+    def get(self) -> Response:
+        """Endpoint (private) provides the price of a specified asset on a given day.
+
+        Returns:
+            Response -- The flask Response object.
+        """
+        args = PRICING_PARSER.parse_args()
+        asset = Asset.get_by_id(args['asset_id'])
+        if asset is None:
+            return abort(400, "Invalid {asset_id} given.")
+        if args['date'] is None:
+            return make_response(jsonify({"price": asset.get_price()}), 200)
+        try:
+            date = parser.parse(args['date'])
+        except Exception:
+            abort(400, "Invalid {date} given.")
+        candle = asset.get_daily_candle(date.date())
+        if candle is None:
+            if date.date() == datetime.utcnow().date():
+                return make_response(jsonify({"price": asset.get_price()}), 200)
+            return abort(400, "The specified {date} is outside the data available for the asset.")
+        return make_response(jsonify({"price": candle.get_close()}), 200)
 
 READ_ASSET_PARSER = API.parser()
 READ_ASSET_PARSER.add_argument('asset_id', type=str, required=True, help='The ID of the asset', location='args')
