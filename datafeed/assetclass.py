@@ -8,12 +8,13 @@ import multiprocessing.dummy as mp
 from alpha_vantage.foreignexchange import ForeignExchange
 from alpha_vantage.timeseries import TimeSeries
 from dateutil import parser
+from dateutil.relativedelta import relativedelta
 from dateutil.tz import UTC
 import dateutil.tz as tz
 
 from models.asset import Currency, Stock
 from models.candle import Candle
-from models.constants import INTERVAL_DAY, INTERVAL_HOUR, INTERVAL_MINUTE
+from models.constants import INTERVAL_DAY, INTERVAL_HOUR, INTERVAL_MINUTE, INTERVAL_MONTH, INTERVAL_WEEK
 import local_config as CONFIG
 
 DAILY_COMPACT_THRESHOLD = 99
@@ -115,6 +116,7 @@ class CurrencyClass(AssetClass):
             Currency.objects.insert(currencies)
         self.updaters.append(CurrencyUpdaterLive(self.api, self.provider))
         self.updaters.append(CurrencyUpdaterDaily(self.api, self.provider))
+        self.updaters.append(AssetUpdaterAggregation(self.api, self.provider, Currency.objects))
         CONFIG.DATA_LOGGER.info("CurrencyClass -> on_startup() -> finish")
 
 class CurrencyUpdaterDaily(IntervalUpdater):
@@ -365,6 +367,7 @@ class StockClass(AssetClass):
             Stock.objects.insert(stocks)
         self.updaters.append(StockUpdaterLive(self.api, self.provider))
         self.updaters.append(StockUpdaterDaily(self.api, self.provider))
+        self.updaters.append(AssetUpdaterAggregation(self.api, self.provider, Stock.objects))
         CONFIG.DATA_LOGGER.info("StocksClass -> on_startup() -> finish")
 
 class StockUpdaterDaily(IntervalUpdater):
@@ -600,3 +603,134 @@ class StockUpdaterLive(IntervalUpdater):
             asset.save()
         CONFIG.DATA_LOGGER.info("StockUpdaterLive -> sync_asset(%s to %s) -> finish", tickers[0], tickers[-1])
         return [True, len(data)]
+
+class AssetUpdaterAggregation(IntervalUpdater):
+    def __init__(self, api, provider, source):
+        self.api = api
+        self.interval = INTERVAL_HOUR
+        self.last_update = None
+        self.name = "Aggregation"
+        self.provider = provider
+        self.source = source
+
+    def aggregate_candles(self, asset, interval, candles):
+        low_price = None
+        high_price = None
+        volume = 0
+        open_price = 0
+        open_stamp = None
+        close_price = 0
+        close_stamp = None
+        for candle in candles:
+            if candle.get_open() is None:
+                continue
+            if low_price is None:
+                low_price = candle.get_low()
+            else:
+                if candle.get_low() < low_price:
+                    low_price = candle.get_low()
+            if high_price is None:
+                high_price = candle.get_high()
+            else:
+                if candle.get_high() > high_price:
+                    high_price = candle.get_high()
+            if candle.get_volume() is not None:
+                volume += candle.get_volume()
+            if open_stamp is None or candle.get_open_time() < open_stamp:
+                open_price = candle.get_open()
+                open_stamp = candle.get_open_time()
+            if close_stamp is None or candle.get_open_time() > close_stamp:
+                close_price = candle.get_close()
+                close_stamp = candle.get_open_time()
+        if volume == 0:
+            volume = None
+        return Candle(asset=asset, low=low_price, high=high_price, open=open_price, close=close_price, volume=volume, open_time=open_stamp, interval=interval)
+
+    def do_update(self):
+        CONFIG.DATA_LOGGER.info("AssetUpdaterAggregation -> do_update() -> start")
+        pool = mp.Pool(CONFIG.WORKER_THREADS)
+        pool.map(self.sync_asset, self.source)
+        pool.close()
+        pool.join()
+        CONFIG.DATA_LOGGER.info("AssetUpdaterAggregation -> do_update() -> finish")
+
+    def sync_asset(self, asset: 'Asset'):
+        self.sync_asset_weekly(asset)
+        self.sync_asset_monthly(asset)
+
+    def sync_asset_monthly(self, asset: 'Asset') -> List:
+        CONFIG.DATA_LOGGER.info("AssetUpdaterAggregation -> sync_asset_monthly(%s) -> start", asset.get_name())
+        last_candle = asset.get_last_candle(interval=INTERVAL_MONTH)
+        candles = []
+        if last_candle is None:
+            first_daily_candle = asset.get_first_candle()
+            if first_daily_candle is None:
+                CONFIG.DATA_LOGGER.error("AssetUpdaterAggregation -> sync_asset_monthly() -> 1")
+                CONFIG.DATA_LOGGER.error(str(asset.as_dict()))
+                return [False, 0]
+            if first_daily_candle.get_open_time().day != 1:
+                first_daily_candle = asset.get_daily_candle(first_daily_candle.get_open_time().replace(day=1)+relativedelta(months=1))
+                if first_daily_candle is None:
+                    CONFIG.DATA_LOGGER.error("AssetUpdaterAggregation -> sync_asset_monthly() -> 2")
+                    CONFIG.DATA_LOGGER.error(str(asset.as_dict()))
+                    return [False, 0]
+            month_start = first_daily_candle.get_open_time().date()
+        else:
+            last_monthly_candle = asset.get_last_candle(interval=INTERVAL_MONTH)
+            if last_monthly_candle is None:
+                CONFIG.DATA_LOGGER.error("AssetUpdaterAggregation -> sync_asset_monthly() -> 3")
+                CONFIG.DATA_LOGGER.error(str(asset.as_dict()))
+                return [False, 0]
+            month_start = (last_monthly_candle.get_open_time().replace(day=1)+relativedelta(months=1)).date()
+        month_end = (month_start+relativedelta(months=1))-timedelta(days=1)
+        while month_end < datetime.utcnow().date():
+            month_of_candles = asset.get_candles_within(interval=INTERVAL_DAY, start=month_start, finish=month_end)
+            candles.append(self.aggregate_candles(asset, INTERVAL_MONTH, month_of_candles))
+            month_start = month_start + relativedelta(months=1)
+            month_end = (month_start+relativedelta(months=1))-timedelta(days=1)
+        if candles:
+            Candle.objects.insert(candles)
+        CONFIG.DATA_LOGGER.info("AssetUpdaterAggregation -> sync_asset_monthly(%s) -> finish", asset.get_name())
+        return [True, len(candles)]
+
+
+    def sync_asset_weekly(self, asset: 'Asset') -> List:
+        CONFIG.DATA_LOGGER.info("AssetUpdaterAggregation -> sync_asset_weekly(%s) -> start", asset.get_name())
+        last_candle = asset.get_last_candle(interval=INTERVAL_WEEK)
+        candles = []
+        if last_candle is None:
+            first_daily_candle = asset.get_first_candle()
+            if first_daily_candle is None:
+                CONFIG.DATA_LOGGER.error("AssetUpdaterAggregation -> sync_asset_weekly() -> 1")
+                CONFIG.DATA_LOGGER.error(str(asset.as_dict()))
+                return [False, 0]
+            weekday = first_daily_candle.get_open_time().weekday()
+            if weekday != 0:
+                first_daily_candle = asset.get_daily_candle(first_daily_candle.get_open_time()+timedelta(days=(7-weekday)))
+                if first_daily_candle is None:
+                    CONFIG.DATA_LOGGER.error("AssetUpdaterAggregation -> sync_asset_weekly() -> 2")
+                    CONFIG.DATA_LOGGER.error(str(asset.as_dict()))
+                    return [False, 0]
+            week_start = first_daily_candle.get_open_time().date()
+            week_end = week_start + timedelta(days=7)
+        else:
+            last_weekly_candle = asset.get_last_candle(interval=INTERVAL_WEEK)
+            if last_weekly_candle is None:
+                CONFIG.DATA_LOGGER.error("AssetUpdaterAggregation -> sync_asset_weekly() -> 3")
+                CONFIG.DATA_LOGGER.error(str(asset.as_dict()))
+                return [False, 0]
+            weekday = last_weekly_candle.get_open_time().weekday()
+            if weekday != 0:
+                week_start = last_weekly_candle.get_open_time().date()+timedelta(days=(7-weekday))
+            else:
+                week_start = last_weekly_candle.get_open_time().date()+timedelta(days=7)
+            week_end = week_start + timedelta(days=7)
+        while week_end < datetime.utcnow().date():
+            week_of_candles = Candle.get_asset_within(asset=asset, interval=INTERVAL_DAY, start=week_start, finish=week_end, exclude_finish=True)
+            candles.append(self.aggregate_candles(asset, INTERVAL_WEEK, week_of_candles))
+            week_start = week_start + timedelta(days=7)
+            week_end = week_start + timedelta(days=7)
+        if candles:
+            Candle.objects.insert(candles)
+        CONFIG.DATA_LOGGER.info("AssetUpdaterAggregation -> sync_asset_weekly(%s) -> finish", asset.get_name())
+        return [True, len(candles)]
