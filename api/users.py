@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from flask import jsonify, make_response, Response
 from flask_restplus import abort, Namespace, Resource
 from flask_jwt_extended import get_jwt_identity, jwt_required
@@ -43,6 +45,7 @@ class UserPortfolioHistorical(Resource):
             historical_portfolio = user.get_portfolio_historical()
             if historical_portfolio is None:
                 return abort(500, "An error occurred calculating the user's historical portfolio value.")
+        historical_portfolio[str(datetime.now().date())] = user.get_portfolio_current()
         return make_response(jsonify(historical_portfolio), 200)
 
 @API.route('/transactions')

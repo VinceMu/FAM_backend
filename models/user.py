@@ -145,7 +145,7 @@ class User(Document):
         content = self.picture.read()
         if content is None:
             return None
-        response = make_response(base64.encodestring(content))
+        response = make_response(base64.b64encode(content))
         response.headers.set("Content-Type", self.picture.content_type)
         response.headers.set("Content-Disposition", "attachment", filename=self.picture.filename)
         return response

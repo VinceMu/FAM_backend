@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 
 from bson import ObjectId
+from dateutil.relativedelta import relativedelta
 from mongoengine import Document, DateTimeField, FloatField, StringField
 
 from models.candle import Candle
@@ -63,7 +64,8 @@ class Asset(Document):
             "class": self.get_asset_class(),
             "price_timestamp": self.get_price_timestamp(),
             "has_recent_update": self.has_recent_update(),
-            "daily_performance": self.get_daily_performance()
+            "daily_performance": self.get_daily_performance(),
+            "interval_performance": self.get_interval_performance()
         }
 
     def as_dict_autocomplete(self) -> dict:
@@ -190,6 +192,23 @@ class Asset(Document):
         """
         return str(self.pk)
 
+    def get_interval_performance(self) -> dict:
+        """Calculates and returns the percentage change from a preset selection of
+        dates to the current date.
+        
+        Returns:
+            dict -- A dictionary containing the timeframe and the percentage performance.
+        """
+        current = datetime.now().date()
+        return {
+            "1W": self.get_percent_change(current-timedelta(weeks=1)),
+            "1M": self.get_percent_change(current-relativedelta(months=1)),
+            "3M": self.get_percent_change(current-relativedelta(months=3)),
+            "6M": self.get_percent_change(current-relativedelta(months=6)),
+            "1Y": self.get_percent_change(current-relativedelta(years=1)),
+            "3Y": self.get_percent_change(current-relativedelta(years=3))
+        }
+
     def get_name(self) -> str:
         """Returns the full name of the asset.
         
@@ -209,6 +228,21 @@ class Asset(Document):
             Candle -- A Candle object matching the query - None if cannot be found.
         """
         return Candle.get_asset_last_candle(self, interval, market_open)
+
+    def get_percent_change(self, date: datetime, use_close: bool = True) -> float:
+        """Returns the percentage change in price from the specified date.
+        
+        Arguments:
+            date {datetime} -- The date to compare the current price to.
+            use_close {bool} -- Whether to use the close_price for comparison (True) or open price (False).
+        
+        Returns:
+            float -- The percentage change in price.
+        """
+        old_candle = self.get_daily_candle(date)
+        if old_candle is None:
+            return None
+        return self.compare_candle_percent(old_candle, use_close)
 
     def get_price(self) -> float:
         """Returns the most recently updated price for the Asset.
