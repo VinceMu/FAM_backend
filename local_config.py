@@ -14,7 +14,7 @@ LIMIT_ASSETS = True
 LIMIT_ASSETS_QUANTITY = 10
 logging.basicConfig()
 DATA_LOGGER = logging.getLogger("DataLink")
-DATA_LOGGER.setLevel(logging.ERROR)
+DATA_LOGGER.setLevel(logging.INFO)
 REST_LOGGER = logging.getLogger("REST")
 REST_LOGGER.setLevel(logging.ERROR)
 DEFAULT_KEY = "[insert key here]"

@@ -63,6 +63,42 @@ class HistoricalDaily(Resource):
         candles_dict = [candle.as_dict() for candle in candles]
         return make_response(jsonify(candles_dict), 200)
 
+HISTORICAL_INTERVAL_PARSER = API.parser()
+HISTORICAL_INTERVAL_PARSER.add_argument('asset_id', type=str, required=True, help='The ID of the asset', location='args')
+HISTORICAL_INTERVAL_PARSER.add_argument('start_datetime', type=str, required=False, help='The start datetime of the request', location='args')
+HISTORICAL_INTERVAL_PARSER.add_argument('end_datetime', type=str, required=False, help='The end datetime of the request', location='args')
+HISTORICAL_INTERVAL_PARSER.add_argument('interval', type=int, required=True, help='The length of candle interval required in seconds (i.e. 86400 for daily)', location='args')
+
+@API.route('/historical/interval')
+class HistoricalInterval(Resource):
+
+    @jwt_required
+    @API.expect(HISTORICAL_INTERVAL_PARSER)
+    def get(self) -> Response:
+        args = HISTORICAL_INTERVAL_PARSER.parse_args()
+        asset = Asset.get_by_id(args['asset_id'])
+        if asset is None:
+            return abort(400, "Invalid {asset_id} given.")
+        if args['start_datetime'] is None:
+            start_date = None
+        else:
+            try:
+                start_date = parser.parse(args['start_datetime'])
+            except Exception:
+                abort(400, "Invalid {start_datetime} given.")
+        if args['end_datetime'] is None:
+            end_date = None
+        else:
+            try:
+                end_date = parser.parse(args['end_datetime'])
+            except Exception:
+                abort(400, "Invalid {end_datetime} given.")
+        if args['interval'] <= 0:
+            abort(400, "Invalid {interval} given.")
+        candles = asset.get_candles_within(start=start_date, finish=end_date, interval=args['interval'])
+        candles_dict = [candle.as_dict() for candle in candles]
+        return make_response(jsonify(candles_dict), 200)
+
 @API.route('/list')
 class ListAssets(Resource):
     
