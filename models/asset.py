@@ -2,10 +2,11 @@ from datetime import datetime, timedelta
 
 from bson import ObjectId
 from dateutil.relativedelta import relativedelta
-from mongoengine import Document, DateTimeField, FloatField, StringField
+from mongoengine import Document, DateTimeField, FloatField, ReferenceField, StringField
 
 from models.candle import Candle
 from models.constants import INTERVAL_DAY
+from models.trend import Trend
 
 class Asset(Document):
     ticker = StringField(required=True)
@@ -13,7 +14,15 @@ class Asset(Document):
     price = FloatField()
     timestamp = DateTimeField()
     earliest_timestamp = DateTimeField()
-    meta = {'allow_inheritance': True}
+    latest_trend = ReferenceField('Trend')
+    latest_trend_timestamp = DateTimeField()
+    meta = {
+        'allow_inheritance': True,
+        'indexes': [
+            'ticker',
+            'name'
+        ]
+    }
 
     @staticmethod
     def autocomplete_by_name(name: str) -> 'QuerySet[Asset]':
@@ -65,7 +74,8 @@ class Asset(Document):
             "price_timestamp": self.get_price_timestamp(),
             "has_recent_update": self.has_recent_update(),
             "daily_performance": self.get_daily_performance(),
-            "interval_performance": self.get_interval_performance()
+            "interval_performance": self.get_interval_performance(),
+            "earliest_date": self.get_earliest_timestamp()
         }
 
     def as_dict_autocomplete(self) -> dict:
@@ -229,6 +239,22 @@ class Asset(Document):
         """
         return Candle.get_asset_last_candle(self, interval, market_open)
 
+    def get_latest_trend(self) -> 'Trend':
+        """Returns the latest Google Trends object.
+        
+        Returns:
+            Trend -- The latest Trend object.
+        """
+        return self.latest_trend
+
+    def get_latest_trend_timestamp(self) -> datetime:
+        """Returns the timestamp of the latest Trends update for the Asset.
+        
+        Returns:
+            datetime -- The datetime of the latest update.
+        """
+        return self.latest_trend_timestamp
+
     def get_percent_change(self, date: datetime, use_close: bool = True) -> float:
         """Returns the percentage change in price from the specified date.
         
@@ -267,6 +293,18 @@ class Asset(Document):
             string -- The symbol (or ticker) which represents the asset.
         """
         return self.ticker
+
+    def get_trends(self, start: datetime = datetime.min, finish: datetime = datetime.max) -> 'QuerySet[Trend]':
+        """Returns the Google Trends data associated with the Asset.
+
+        Keyword Arguments:
+            start {date} -- The starting point of the data in the lookup. {default: datetime.min}
+            finish {date} -- The finishing point of the data in the lookup. {default: datetime.max}
+        
+        Returns:
+            QuerySet[Trend] -- An iterable QuerySet of Trend objects.
+        """
+        return Trend.get_trends(search_term=self.get_name(), start=start, finish=finish)
 
     def has_recent_update(self, interval: int = 600) -> bool:
         """Returns whether the asset current price has been updated recently within an optional specified interval.
@@ -311,6 +349,12 @@ class Asset(Document):
         earliest_candle = self.get_first_candle()
         if earliest_candle is not None:
             self.set_earliest_timestamp(earliest_candle.get_open_time())
+
+    def update_latest_trend(self) -> None:
+        """Update the latest Trend object for the asset.
+        """
+        self.latest_trend = Trend.get_latest_trend(self.get_name())
+        self.latest_trend_timestamp = datetime.utcnow()
 
 class Currency(Asset):
     pass

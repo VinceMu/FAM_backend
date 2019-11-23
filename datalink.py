@@ -6,6 +6,7 @@ from mongoengine import connect
 
 import datafeed.assetclass as AssetClass
 from datafeed.provider import AlphaVantageProvider
+from datafeed.provider import GoogleTrendsProvider
 import local_config as CONFIG
 
 class DataLink:
@@ -17,8 +18,9 @@ class DataLink:
         """Loads all the asset classes in the DataLink.
         """
         provider = AlphaVantageProvider()
-        self.asset_classes.append(AssetClass.CurrencyClass(provider))
-        self.asset_classes.append(AssetClass.StockClass(provider))
+        trends_provider = GoogleTrendsProvider()
+        self.asset_classes.append(AssetClass.CurrencyClass(provider, trends_provider))
+        self.asset_classes.append(AssetClass.StockClass(provider, trends_provider))
 
     def run(self) -> None:
         """Begins running the DataLink which involves:
