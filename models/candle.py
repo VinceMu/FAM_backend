@@ -39,20 +39,23 @@ class Candle(Document):
         }
 
     @staticmethod
-    def get_asset(asset: 'Asset', interval: int = INTERVAL_DAY) -> 'QuerySet[Candle]':
+    def get_asset(asset: 'Asset', interval: int = INTERVAL_DAY, exclude_filler: bool = False) -> 'QuerySet[Candle]':
         """Returns a list of candles given the asset and the interval.
         
         Arguments:
             asset {Asset} -- The Asset collection object.
             interval {int} -- The number of seconds each candle represents. (default: {INTERVAL_DAY})
+            exclude_filler {bool} -- Whether to exclude filler candles from the results. (default: {False})
         
         Returns:
             QuerySet[Candle] -- An iterable QuerySet containing objects in the collection matching the query.
         """
+        if exclude_filler:
+            return Candle.objects(asset=asset, interval=interval, open__ne=None)
         return Candle.objects(asset=asset, interval=interval)
 
     @staticmethod
-    def get_asset_within(asset: 'Asset', interval: int = INTERVAL_DAY, start: datetime = datetime.min, finish: datetime = datetime.max, exclude_start: bool = False, exclude_finish: bool = False) -> 'QuerySet[Candle]':
+    def get_asset_within(asset: 'Asset', interval: int = INTERVAL_DAY, start: datetime = datetime.min, finish: datetime = datetime.max, exclude_start: bool = False, exclude_finish: bool = False, exclude_filler: bool = False) -> 'QuerySet[Candle]':
         """Returns the candles for the given asset and interval within the specified timeframe.
         
         Arguments:
@@ -62,6 +65,7 @@ class Candle(Document):
             finish {datetime} -- The finishing datetime of the interval. (default: {datetime.max})
             exclude_start {bool} -- Whether to exclude the start datetime from the interval. (default: {False})
             exclude_finish {bool} -- Whether to exclude the finish datetime from the interval. (default: {False})
+            exclude_filler {bool} -- Whether to exclude filler candles from the results. (default: {False})
     
         Returns:
             QuerySet[Candle] -- An iterable QuerySet containing objects in the collection matching the query.
@@ -70,7 +74,7 @@ class Candle(Document):
             start = datetime.min
         if finish is None:
             finish = datetime.max
-        result_set = Candle.get_asset(asset, interval)
+        result_set = Candle.get_asset(asset=asset, interval=interval, exclude_filler=exclude_filler)
         if exclude_start and exclude_finish:
             return result_set.filter(Q(open_time__gt=start) & Q(open_time__lt=finish))
         if exclude_start:
