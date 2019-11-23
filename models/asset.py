@@ -294,13 +294,17 @@ class Asset(Document):
         """
         return self.ticker
 
-    def get_trends(self) -> 'QuerySet[Trend]':
+    def get_trends(self, start: datetime = datetime.min, finish: datetime = datetime.max) -> 'QuerySet[Trend]':
         """Returns the Google Trends data associated with the Asset.
+
+        Keyword Arguments:
+            start {date} -- The starting point of the data in the lookup. {default: datetime.min}
+            finish {date} -- The finishing point of the data in the lookup. {default: datetime.max}
         
         Returns:
             QuerySet[Trend] -- An iterable QuerySet of Trend objects.
         """
-        return Trend.get_trends(self.get_name())
+        return Trend.get_trends(search_term=self.get_name(), start=start, finish=finish)
 
     def has_recent_update(self, interval: int = 600) -> bool:
         """Returns whether the asset current price has been updated recently within an optional specified interval.

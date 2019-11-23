@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Dict
 
-from mongoengine import BooleanField, DateTimeField, Document, IntField, StringField
+from mongoengine import BooleanField, DateTimeField, Document, IntField, Q, StringField
 
 class Trend(Document):
 
@@ -30,20 +30,27 @@ class Trend(Document):
         return Trend.objects(search_term=search_term).first()
 
     @staticmethod
-    def get_trends(search_term: str, is_chronological: bool = True) -> 'QuerySet[Trend]':
+    def get_trends(search_term: str, is_chronological: bool = True, start: datetime = datetime.min, finish: datetime = datetime.max) -> 'QuerySet[Trend]':
         """Returns all Trend data associated with the search term.
         
         Arguments:
             search_term {str} -- The search term to lookup.
             is_chronological {bool} -- Whether to return in chronological order. {default: True}
+            start {date} -- The starting point of the data in the lookup. {default: datetime.min}
+            finish {date} -- The finishing point of the data in the lookup. {default: datetime.max}
         
         Returns:
             QuerySet[Trend] -- An iterable QuerySet of the Trend data.
         """
+        if start is None:
+            start = datetime.min
+        if finish is None:
+            finish = datetime.max
         if is_chronological:
-            return Trend.objects(search_term=search_term).order_by('timestamp')
+            result_set = Trend.objects(search_term=search_term).order_by('timestamp')
         else:
-            return Trend.objects(search_term=search_term)
+            result_set = Trend.objects(search_term=search_term)
+        return result_set.filter(Q(timestamp__gte=start) & Q(timestamp__lte=finish))
 
     def as_dict(self) -> Dict:
         """Returns the data of the Trend object formatted as a Dict.

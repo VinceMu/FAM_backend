@@ -160,6 +160,8 @@ class ReadAsset(Resource):
 
 TRENDS_READ_PARSER = API.parser()
 TRENDS_READ_PARSER.add_argument('asset_id', type=str, required=True, help='The ID of the asset', location='args')
+TRENDS_READ_PARSER.add_argument('start_date', type=str, required=False, help='The start date of the request', location='args')
+TRENDS_READ_PARSER.add_argument('end_date', type=str, required=False, help='The end date of the request', location='args')
 
 @API.route('/trends/read')
 class TrendsRead(Resource):
@@ -176,6 +178,20 @@ class TrendsRead(Resource):
         asset = Asset.get_by_id(args['asset_id'])
         if asset is None:
             return abort(400, "Invalid {asset_id} given.")
-        trends = asset.get_trends()
+        if args['start_date'] is None:
+            start_date = None
+        else:
+            try:
+                start_date = parser.parse(args['start_date'])
+            except Exception:
+                abort(400, "Invalid {start_date} given.")
+        if args['end_date'] is None:
+            end_date = None
+        else:
+            try:
+                end_date = parser.parse(args['end_date'])
+            except Exception:
+                abort(400, "Invalid {end_date} given.")
+        trends = asset.get_trends(start=start_date, finish=end_date)
         trends_dict = [trend.as_dict() for trend in trends]
         return make_response(jsonify(trends_dict), 200)

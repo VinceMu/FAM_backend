@@ -75,7 +75,9 @@ class Candle(Document):
             return result_set.filter(Q(open_time__gt=start) & Q(open_time__lt=finish))
         if exclude_start:
             return result_set.filter(Q(open_time__gt=start) & Q(open_time__lte=finish))
-        return result_set.filter(Q(open_time__gte=start) & Q(open_time__lt=finish))
+        if exclude_finish:
+            return result_set.filter(Q(open_time__gte=start) & Q(open_time__lt=finish))
+        return result_set.filter(Q(open_time__gte=start) & Q(open_time__lte=finish))
 
     @staticmethod
     def get_asset_first_candle(asset: 'Asset', interval: int = INTERVAL_DAY) -> 'Candle':
