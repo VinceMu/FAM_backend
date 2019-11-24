@@ -184,6 +184,7 @@ class CurrencyUpdaterDaily(IntervalUpdater):
                 self.provider.make_request()
                 # Make the request with the given ticker
                 data = self.api.get_currency_exchange_daily(asset.get_ticker(), "USD", outputsize=sync_type)
+                counter = DAILY_MAX_RETRIES
             except Exception as ex:
                 # Log the details of the error if we fail
                 CONFIG.DATA_LOGGER.error("CurrencyUpdaterDaily -> sync_asset() -> 1")
@@ -193,8 +194,6 @@ class CurrencyUpdaterDaily(IntervalUpdater):
                 sleep(CONFIG.ERROR_WAIT_TIME)
                 # Increment the number of failures
                 counter += 1
-                continue
-            break
         # If no data was returned, notify that we failed to sync the data
         if data is None:
             return [False, 0]
@@ -277,7 +276,7 @@ class CurrencyUpdaterDaily(IntervalUpdater):
 class CurrencyUpdaterLive(IntervalUpdater):
     def __init__(self, api, provider):
         self.api = api
-        self.interval = INTERVAL_MINUTE
+        self.interval = CONFIG.LIVE_UPDATE_INTERVAL
         self.last_update = None
         self.name = "Live"
         self.provider = provider
@@ -307,14 +306,13 @@ class CurrencyUpdaterLive(IntervalUpdater):
             try:
                 self.provider.make_request()
                 data = self.api.get_currency_exchange_rate(asset.get_ticker(), "USD")
+                counter = CONFIG.MAX_RETRIES
             except Exception as ex:
                 CONFIG.DATA_LOGGER.error("CurrencyUpdaterLive -> sync_asset() -> 1")
                 CONFIG.DATA_LOGGER.error(str(asset.as_dict()))
                 CONFIG.DATA_LOGGER.exception(str(ex))
                 sleep(CONFIG.ERROR_WAIT_TIME)
                 counter += 1
-                continue
-            break
         if data is None:
             return [False, 0]
         try:
@@ -439,6 +437,7 @@ class StockUpdaterDaily(IntervalUpdater):
                 self.provider.make_request()
                 # Make the request with the given ticker
                 data = self.api.get_daily(asset.get_ticker(), outputsize=sync_type)
+                counter = DAILY_MAX_RETRIES
             except Exception as ex:
                 # Log the details of the error if we fail
                 CONFIG.DATA_LOGGER.error("StockUpdaterDaily -> sync_asset() -> 1")
@@ -448,8 +447,6 @@ class StockUpdaterDaily(IntervalUpdater):
                 sleep(CONFIG.ERROR_WAIT_TIME)
                 # Increment the number of failures
                 counter += 1
-                continue
-            break
         # If no data was returned, notify that we failed to sync the data
         if data is None:
             return [False, 0]
@@ -533,7 +530,7 @@ class StockUpdaterDaily(IntervalUpdater):
 class StockUpdaterLive(IntervalUpdater):
     def __init__(self, api, provider):
         self.api = api
-        self.interval = INTERVAL_MINUTE
+        self.interval = CONFIG.LIVE_UPDATE_INTERVAL
         self.last_update = None
         self.name = "Live"
         self.provider = provider
@@ -572,14 +569,13 @@ class StockUpdaterLive(IntervalUpdater):
             try:
                 self.provider.make_request()
                 data = self.api.get_batch_stock_quotes(symbols=tickers)[0]
+                counter = CONFIG.MAX_RETRIES
             except Exception as ex:
                 CONFIG.DATA_LOGGER.error("StockUpdaterLive -> sync_asset() -> 1")
                 CONFIG.DATA_LOGGER.error(repr(tickers))
                 CONFIG.DATA_LOGGER.exception(str(ex))
                 sleep(CONFIG.ERROR_WAIT_TIME)
                 counter += 1
-                continue
-            break
         if data is None:
             return [False, 0]
         for stock in data:

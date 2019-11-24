@@ -4,9 +4,12 @@ from bson import ObjectId
 from dateutil.relativedelta import relativedelta
 from mongoengine import Document, DateTimeField, FloatField, Q, ReferenceField, StringField
 
+from local_config import LIVE_UPDATE_INTERVAL
 from models.candle import Candle
 from models.constants import INTERVAL_DAY
 from models.trend import Trend
+
+OFFLINE_THRESHOLD = LIVE_UPDATE_INTERVAL*1.5
 
 class Asset(Document):
     ticker = StringField(required=True)
@@ -307,7 +310,7 @@ class Asset(Document):
         """
         return Trend.get_trends(search_term=self.get_name(), start=start, finish=finish)
 
-    def has_recent_update(self, interval: int = 600) -> bool:
+    def has_recent_update(self, interval: int = (OFFLINE_THRESHOLD)) -> bool:
         """Returns whether the asset current price has been updated recently within an optional specified interval.
         
         Keyword Arguments:

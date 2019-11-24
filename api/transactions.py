@@ -60,7 +60,7 @@ class CreateTransaction(Resource):
                 price_purchased = float(args['price_purchased'])
             except Exception:
                 return abort(400, "Invalid {price_purchased} given.")
-            if price_purchased <= 0:
+            if price_purchased < 0:
                 return abort(400, "The {price_purchased} cannot be less than or equal to 0.")
         if args['date_sold'] is None:
             date_sold = None

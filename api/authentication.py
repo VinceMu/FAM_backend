@@ -104,6 +104,9 @@ class Register(Resource):
             Response -- The Flask response object.
         """
         args = REGISTER_PARSER.parse_args()
+        if args['email'] == "":
+            return abort(400, "The {email} field cannot be empty")
+        if len(args['password'])
         check_auth = Auth.get_by_email(args['email'])
         if check_auth is not None:
             REST_LOGGER.info("auth/register -> Duplicate registration attempt for email %s", args['email'])
