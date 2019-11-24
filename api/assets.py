@@ -6,6 +6,7 @@ from flask_restplus import abort, Namespace, Resource
 from flask_jwt_extended import jwt_required
 
 from models.asset import Asset
+from models.constants import MAX_INT, MIN_INT
 
 API = Namespace('assets', description='assets endpoint')
 
@@ -101,7 +102,7 @@ class HistoricalInterval(Resource):
                 end_date = parser.parse(args['end_datetime'])
             except Exception:
                 abort(400, "Invalid {end_datetime} given.")
-        if args['interval'] <= 0:
+        if args['interval'] <= 0 or args['interval'] < MIN_INT or args['interval'] > MAX_INT:
             abort(400, "Invalid {interval} given.")
         candles = asset.get_candles_within(start=start_date, finish=end_date, interval=args['interval'], exclude_filler=True)
         candles_dict = [candle.as_dict() for candle in candles]
