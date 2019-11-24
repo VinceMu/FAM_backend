@@ -105,7 +105,9 @@ class Register(Resource):
         """
         args = REGISTER_PARSER.parse_args()
         if args['email'] == "":
-            return abort(400, "The {email} field cannot be empty")
+            return abort(400, "The {email} field cannot be empty.")
+        if args['fullname'] == "":
+            return abort(400, "The {fullname} field cannot be empty.")
         if "@" not in args['email']:
             return abort(400, "The {email} specified is invalid.")
         if len(args['password']) < 6:
