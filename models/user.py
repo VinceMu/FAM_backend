@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 from typing import List
 import base64
+
 from flask import make_response
 from mongoengine import DateTimeField, DictField, Document, FileField, ListField, ReferenceField, StringField
 
@@ -57,10 +58,14 @@ class User(Document):
         Returns:
             dict -- Details of the user.
         """
+        if self.get_base_currency() is None:
+            currency_ticker = ""
+        else:
+            currency_ticker = self.get_base_currency().get_ticker()
         return {
             "email": self.get_email(),
             "name": self.get_name(),
-            "base_currency": self.get_base_currency()
+            "base_currency": currency_ticker
         }
 
     def delete_transaction(self, transaction: 'Transaction') -> None:
@@ -206,11 +211,13 @@ class User(Document):
             for candle in candles:
                 tag = str(candle.get_open_time().date())
                 if tag in value:
-                    spent_value[tag] = spent_value[tag] - (transaction.get_quantity() * transaction.get_buy_price())
                     value[tag] = value[tag] + (transaction.get_quantity() * candle.get_close())
                 else:
-                    spent_value[tag] = - (transaction.get_quantity() * transaction.get_buy_price())
                     value[tag] = (candle.get_close() * transaction.get_quantity())
+                if tag in spent_value:
+                    spent_value[tag] = spent_value[tag] - (transaction.get_quantity() * transaction.get_buy_price())
+                else:
+                    spent_value[tag] = - (transaction.get_quantity() * transaction.get_buy_price())
             if sell_date is not None:
                 curr_date = sell_date
                 while curr_date < latest_date:

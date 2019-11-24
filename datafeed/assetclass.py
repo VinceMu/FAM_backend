@@ -4,6 +4,7 @@ from time import sleep
 from typing import List
 import csv
 import json
+import os
 import multiprocessing.dummy as mp
 
 from alpha_vantage.foreignexchange import ForeignExchange
@@ -187,13 +188,17 @@ class CurrencyUpdaterDaily(IntervalUpdater):
                 counter = DAILY_MAX_RETRIES
             except Exception as ex:
                 # Log the details of the error if we fail
-                CONFIG.DATA_LOGGER.error("CurrencyUpdaterDaily -> sync_asset() -> 1")
-                CONFIG.DATA_LOGGER.error(str(asset.as_dict()))
-                CONFIG.DATA_LOGGER.exception(str(ex))
+                CONFIG.DATA_LOGGER.error("Failed to update daily data for %s -> Attempt %s", asset.get_name(), str(counter))
+                #CONFIG.DATA_LOGGER.error("CurrencyUpdaterDaily -> sync_asset() -> 1")
+                #CONFIG.DATA_LOGGER.error(str(asset.as_dict()))
+                #CONFIG.DATA_LOGGER.exception(str(ex))
                 # Wait for specified time by configuration
                 sleep(CONFIG.ERROR_WAIT_TIME)
                 # Increment the number of failures
                 counter += 1
+                if counter == DAILY_MAX_RETRIES:
+                    CONFIG.DATA_LOGGER.error("Failed to update daily data for %s -> Attempt %s (Terminated)", asset.get_name(), str(counter))
+                    os._exit(1)
         # If no data was returned, notify that we failed to sync the data
         if data is None:
             return [False, 0]
@@ -308,11 +313,15 @@ class CurrencyUpdaterLive(IntervalUpdater):
                 data = self.api.get_currency_exchange_rate(asset.get_ticker(), "USD")
                 counter = CONFIG.MAX_RETRIES
             except Exception as ex:
-                CONFIG.DATA_LOGGER.error("CurrencyUpdaterLive -> sync_asset() -> 1")
-                CONFIG.DATA_LOGGER.error(str(asset.as_dict()))
-                CONFIG.DATA_LOGGER.exception(str(ex))
+                CONFIG.DATA_LOGGER.error("Failed to update live data for %s -> Attempt %s", asset.get_name(), str(counter))
+                #CONFIG.DATA_LOGGER.error("CurrencyUpdaterLive -> sync_asset() -> 1")
+                #CONFIG.DATA_LOGGER.error(str(asset.as_dict()))
+                #CONFIG.DATA_LOGGER.exception(str(ex))
                 sleep(CONFIG.ERROR_WAIT_TIME)
                 counter += 1
+                if counter == DAILY_MAX_RETRIES:
+                    CONFIG.DATA_LOGGER.error("Failed to update live data for %s -> Attempt %s (Terminated)", asset.get_name(), str(counter))
+                    os._exit(1)
         if data is None:
             return [False, 0]
         try:
@@ -440,13 +449,17 @@ class StockUpdaterDaily(IntervalUpdater):
                 counter = DAILY_MAX_RETRIES
             except Exception as ex:
                 # Log the details of the error if we fail
-                CONFIG.DATA_LOGGER.error("StockUpdaterDaily -> sync_asset() -> 1")
-                CONFIG.DATA_LOGGER.error(str(asset.as_dict()))
-                CONFIG.DATA_LOGGER.exception(str(ex))
+                CONFIG.DATA_LOGGER.error("Failed to update daily data for %s -> Attempt %s", asset.get_name(), str(counter))
+                #CONFIG.DATA_LOGGER.error("StockUpdaterDaily -> sync_asset() -> 1")
+                #CONFIG.DATA_LOGGER.error(str(asset.as_dict()))
+                #CONFIG.DATA_LOGGER.exception(str(ex))
                 # Wait for specified time by configuration
                 sleep(CONFIG.ERROR_WAIT_TIME)
                 # Increment the number of failures
                 counter += 1
+                if counter == DAILY_MAX_RETRIES:
+                    CONFIG.DATA_LOGGER.error("Failed to update daily data for %s -> Attempt %s (Terminated)", asset.get_name(), str(counter))
+                    os._exit(1)
         # If no data was returned, notify that we failed to sync the data
         if data is None:
             return [False, 0]
@@ -571,11 +584,15 @@ class StockUpdaterLive(IntervalUpdater):
                 data = self.api.get_batch_stock_quotes(symbols=tickers)[0]
                 counter = CONFIG.MAX_RETRIES
             except Exception as ex:
-                CONFIG.DATA_LOGGER.error("StockUpdaterLive -> sync_asset() -> 1")
-                CONFIG.DATA_LOGGER.error(repr(tickers))
-                CONFIG.DATA_LOGGER.exception(str(ex))
+                CONFIG.DATA_LOGGER.error("Failed to update live data for (%s to %s) -> Attempt %s", tickers[0], tickers[-1], str(counter))
+                #CONFIG.DATA_LOGGER.error("StockUpdaterLive -> sync_asset() -> 1")
+                #CONFIG.DATA_LOGGER.error(repr(tickers))
+                #CONFIG.DATA_LOGGER.exception(str(ex))
                 sleep(CONFIG.ERROR_WAIT_TIME)
                 counter += 1
+                if counter == DAILY_MAX_RETRIES:
+                    CONFIG.DATA_LOGGER.error("Failed to update live data for (%s to %s) -> Attempt %s (Terminated)", tickers[0], tickers[-1], str(counter))
+                    os._exit(1)
         if data is None:
             return [False, 0]
         for stock in data:

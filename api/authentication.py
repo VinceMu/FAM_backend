@@ -143,6 +143,8 @@ class UpdateAuth(Resource):
             Response -- The Flask response object.
         """
         args = UPDATE_PARSER.parse_args()
+        if len(args['new_password']) < 6:
+            return abort(400, "Your {new_password} must be of length >= 6 characters.")
         auth = Auth.authenticate(get_jwt_identity(), args['old_password'])
         if auth is None:
             return abort(401, "Invalid credentials supplied.")
