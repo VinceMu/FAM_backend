@@ -205,12 +205,15 @@ class User(Document):
             candles = transaction.get_asset().get_candles_within(start=buy_date, finish=sell_date)
             for candle in candles:
                 tag = str(candle.get_open_time().date())
+                print(tag)
                 if tag in value:
-                    spent_value[tag] = spent_value[tag] - (transaction.get_quantity() * transaction.get_buy_price())
                     value[tag] = value[tag] + (transaction.get_quantity() * candle.get_close())
                 else:
-                    spent_value[tag] = - (transaction.get_quantity() * transaction.get_buy_price())
                     value[tag] = (candle.get_close() * transaction.get_quantity())
+                if tag in spent_value:
+                    spent_value[tag] = spent_value[tag] - (transaction.get_quantity() * transaction.get_buy_price())
+                else:
+                    spent_value[tag] = - (transaction.get_quantity() * transaction.get_buy_price())
             if sell_date is not None:
                 curr_date = sell_date
                 while curr_date < latest_date:

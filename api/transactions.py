@@ -196,7 +196,7 @@ class UpdateTransaction(Resource):
             if date_purchased > datetime.utcnow():
                 return abort(400, "The {date_purchased} cannot be ahead of time.")
             purchase_candle = transaction.get_asset().get_daily_candle(date_purchased)
-            if purchase_candle is None or (date_purchased.date() != datetime.utcnow().date()):
+            if purchase_candle is None and (date_purchased.date() != datetime.utcnow().date()):
                 return abort(400, "The given {date_purchased} is prior to the platform's pricing history for the asset.")
             transaction.set_buy_date(date_purchased)
         if args['price_purchased'] is not None:
