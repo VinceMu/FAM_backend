@@ -51,10 +51,13 @@ class CreateTransaction(Resource):
         if date_purchased > datetime.utcnow():
             return abort(400, "The {date_purchased} cannot be ahead of time.")
         purchase_candle = asset.get_daily_candle(date_purchased)
-        if purchase_candle is None:
+        if purchase_candle is None and date_purchased.date() != datetime.utcnow().date():
             return abort(400, "The given {date_purchased} is prior to the platform's pricing history for the asset.")
         if args['price_purchased'] is None:
-            price_purchased = purchase_candle.get_close()
+            if purchase_candle is None:
+                price_purchased = asset.get_price()
+            else:
+                price_purchased = purchase_candle.get_close()
         else:
             try:
                 price_purchased = float(args['price_purchased'])
@@ -62,7 +65,7 @@ class CreateTransaction(Resource):
                 return abort(400, "Invalid {price_purchased} given.")
             if price_purchased <= 0:
                 return abort(400, "The {price_purchased} cannot be less than or equal to 0.")
-        if args['date_sold'] is None:
+        if args['date_sold'] is None or args['date_sold'] == "":
             date_sold = None
             price_sold = None
         else:
@@ -193,7 +196,7 @@ class UpdateTransaction(Resource):
             if date_purchased > datetime.utcnow():
                 return abort(400, "The {date_purchased} cannot be ahead of time.")
             purchase_candle = transaction.get_asset().get_daily_candle(date_purchased)
-            if purchase_candle is None:
+            if purchase_candle is None or (date_purchased.date() != datetime.utcnow().date()):
                 return abort(400, "The given {date_purchased} is prior to the platform's pricing history for the asset.")
             transaction.set_buy_date(date_purchased)
         if args['price_purchased'] is not None:
@@ -206,28 +209,40 @@ class UpdateTransaction(Resource):
             transaction.set_buy_price(price_purchased)
         else:
             if args['date_purchased'] is not None:
-                transaction.set_buy_price(purchase_candle.get_close())
+                if purchase_candle is None:
+                    transaction.set_buy_price(transaction.get_asset().get_price())
+                else:
+                    transaction.set_buy_price(purchase_candle.get_close())
         if args['date_sold'] is not None:
-            try:
-                date_sold = parser.parse(args['date_sold'])
-                date_sold = date_sold.replace(tzinfo=None)
-            except Exception:
-                return abort(400, "Invalid {date_sold} specified.")
-            if date_sold > datetime.utcnow():
-                return abort(400, "The {date_sold} cannot be ahead of time.")
-            if date_sold <= date_purchased:
-                return abort(400, "The {date_sold} must be further ahead in time than the {date_purchased}.")
-            transaction.set_sell_date(date_sold)
+            if args['date_sold'] == "":
+                transaction.set_sell_date(None)
+                transaction.set_sell_price(None)
+            else:
+                try:
+                    date_sold = parser.parse(args['date_sold'])
+                    date_sold = date_sold.replace(tzinfo=None)
+                except Exception:
+                    return abort(400, "Invalid {date_sold} specified.")
+                if date_sold > datetime.utcnow():
+                    return abort(400, "The {date_sold} cannot be ahead of time.")
+                if date_sold <= date_purchased:
+                    return abort(400, "The {date_sold} must be further ahead in time than the {date_purchased}.")
+                sell_candle = transaction.get_asset().get_daily_candle(date_sold)
+                if sell_candle is None and date_sold.date() != datetime.utcnow().date():
+                    return abort(400, "The given {date_sold} is outside the platform's pricing history for the asset.")
+                transaction.set_sell_date(date_sold)
         if args['price_sold'] is not None:
+            if transaction.get_sell_date() is None:
+                return abort(400, "The {price_sold} field cannot be set while {date_sold} hasn't been set.")
             try:
                 price_sold = float(args['price_sold'])
             except Exception:
                 return abort(400, "Invalid {price_sold} specified.")
-            if price_sold <= 0:
-                return abort(400, "The {price_sold} cannot be less than or equal to 0.")
+            if price_sold < 0:
+                return abort(400, "The {price_sold} cannot be less than 0.")
             transaction.set_sell_price(price_sold)
         else:
-            if args['date_sold'] is not None:
+            if transaction.get_sell_date() is not None:
                 if date_sold.date() == datetime.utcnow().date():
                     transaction.set_sell_price(transaction.get_asset().get_price())
                 else:

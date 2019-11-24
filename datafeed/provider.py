@@ -40,6 +40,11 @@ class Provider(ABC):
         Returns:
             int -- The number of requests that can be made in the next minute.
         """
+        curr_time = int(time()/60)
+        if curr_time != self.time:
+            self.lock.acquire()
+            self.count = 0
+            self.lock.release()
         return self.max_requests-self.count
 
     def make_request(self) -> None:

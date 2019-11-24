@@ -104,6 +104,14 @@ class Register(Resource):
             Response -- The Flask response object.
         """
         args = REGISTER_PARSER.parse_args()
+        if args['email'] == "":
+            return abort(400, "The {email} field cannot be empty.")
+        if args['fullname'] == "":
+            return abort(400, "The {fullname} field cannot be empty.")
+        if "@" not in args['email']:
+            return abort(400, "The {email} specified is invalid.")
+        if len(args['password']) < 6:
+            return abort(400, "The {password} given must be >= 6 characters.")
         check_auth = Auth.get_by_email(args['email'])
         if check_auth is not None:
             REST_LOGGER.info("auth/register -> Duplicate registration attempt for email %s", args['email'])
