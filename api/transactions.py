@@ -51,10 +51,13 @@ class CreateTransaction(Resource):
         if date_purchased > datetime.utcnow():
             return abort(400, "The {date_purchased} cannot be ahead of time.")
         purchase_candle = asset.get_daily_candle(date_purchased)
-        if purchase_candle is None:
+        if purchase_candle is None and date_purchased.date() != datetime.utcnow().date():
             return abort(400, "The given {date_purchased} is prior to the platform's pricing history for the asset.")
         if args['price_purchased'] is None:
-            price_purchased = purchase_candle.get_close()
+            if purchase_candle is None:
+                price_purchased = asset.get_price()
+            else:
+                price_purchased = purchase_candle.get_close()
         else:
             try:
                 price_purchased = float(args['price_purchased'])
