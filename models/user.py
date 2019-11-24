@@ -210,7 +210,6 @@ class User(Document):
             candles = transaction.get_asset().get_candles_within(start=buy_date, finish=sell_date)
             for candle in candles:
                 tag = str(candle.get_open_time().date())
-                print(tag)
                 if tag in value:
                     value[tag] = value[tag] + (transaction.get_quantity() * candle.get_close())
                 else:
