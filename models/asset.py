@@ -2,7 +2,7 @@ from datetime import datetime, timedelta
 
 from bson import ObjectId
 from dateutil.relativedelta import relativedelta
-from mongoengine import Document, DateTimeField, FloatField, ReferenceField, StringField
+from mongoengine import Document, DateTimeField, FloatField, Q, ReferenceField, StringField
 
 from models.candle import Candle
 from models.constants import INTERVAL_DAY
@@ -34,7 +34,7 @@ class Asset(Document):
         Returns:
             QuerySet[Asset] -- An iterable QuerySet containing Assets in the collection which match the query.
         """
-        return Asset.objects(name__contains=name)
+        return Asset.objects(Q(name__istartswith=name) | Q(ticker__istartswith=name))
 
     @staticmethod
     def get() -> 'QuerySet[Asset]':
