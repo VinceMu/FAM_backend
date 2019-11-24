@@ -54,6 +54,12 @@ REST_LOGGER = logging.getLogger("REST")
 # The logging level for the REST API - logging.ERROR is default
 REST_LOGGER.setLevel(logging.ERROR)
 
+###########
+#Uploading#
+###########
+
+PROFILE_PIC_TYPES = ['image/jpeg', 'image/png', 'image/gif']
+
 ##################
 #AlphaVantage API#
 ##################

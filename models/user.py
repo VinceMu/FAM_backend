@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 from typing import List
 import base64
+
 from flask import make_response
 from mongoengine import DateTimeField, DictField, Document, FileField, ListField, ReferenceField, StringField
 
@@ -57,10 +58,14 @@ class User(Document):
         Returns:
             dict -- Details of the user.
         """
+        if self.get_base_currency() is None:
+            currency_ticker = ""
+        else:
+            currency_ticker = self.get_base_currency().get_ticker()
         return {
             "email": self.get_email(),
             "name": self.get_name(),
-            "base_currency": self.get_base_currency()
+            "base_currency": currency_ticker
         }
 
     def delete_transaction(self, transaction: 'Transaction') -> None:

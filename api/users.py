@@ -7,6 +7,7 @@ from werkzeug.datastructures import FileStorage
 
 from models.asset import Asset
 from models.user import User
+from local_config import PROFILE_PIC_TYPES
 
 API = Namespace('users', description='users endpoint')
 
@@ -118,11 +119,15 @@ class UpdateUser(Resource):
         if user is None:
             return abort(401, "You are not permitted to access this endpoint.")
         if args['fullname'] is not None:
+            if args['fullname'] == "":
+                return abort(400, "Your {fullname} cannot be empty.")
             user.set_name(args['fullname'])
         if args['currency_id'] is not None:
             currency = Asset.get_by_id(args['currency_id'])
             if currency is None:
-                return abort(400, "An invalud {currency_id} was given as a base currency.")
+                return abort(400, "An invalid {currency_id} was given as a base currency.")
+            if currency.get_asset_class() != "Currency":
+                return abort(400, "The provided {currency_id} is not a currency.")
             user.set_base_currency(currency)
         user.save()
         return make_response(jsonify({"msg": "The user details have been successfully updated."}), 200)
@@ -143,6 +148,8 @@ class UploadUser(Resource):
         """
         args = UPLOAD_PARSER.parse_args()
         user = User.get_by_email(get_jwt_identity())
+        if args['profile_picture'].content_type not in PROFILE_PIC_TYPES:
+            return abort(400, "Invalid {profile_picture} content type. Valid types: " + str(PROFILE_PIC_TYPES))
         if user is None:
             return abort(401, "You are not permitted to access this endpoint.")
         user.set_picture(args['profile_picture'])
