@@ -21,5 +21,5 @@ pyrsistent==0.15.4
 python-dateutil==2.8.0
 pytz==2019.3
 six==1.12.0
-Werkzeug==0.16.0
+Werkzeug==2.2.3
 zipp==0.6.0
